@@ -1,0 +1,59 @@
+# Variante para probar chat con DOS instancias (fan-out entre réplicas por RabbitMQ).
+#
+# Se corre encadenado sobre los otros dos archivos:
+#
+#   docker compose -f docker-compose.yaml -f docker-compose.override.yaml -f docker-compose.multichat.yaml up --build
+#
+# Agrega una segunda réplica de chat (`chat-service-2`) y un segundo gateway
+# (`api-gateway-2`, puerto 8082) fijado a esa réplica. Así cada cliente queda
+# pegado a una instancia distinta de forma determinística:
+#
+#   cliente A (p. ej. web)    -> :8080 api-gateway   -> chat-service
+#   cliente B (p. ej. mobile) -> :8082 api-gateway-2 -> chat-service-2
+#
+# Las dos réplicas comparten Mongo y RabbitMQ. Cada una consume
+# `chat.message.sent` desde su propia cola por instancia, así que un mensaje
+# enviado en una llega a los sockets conectados en la otra.
+
+services:
+  chat-service-2:
+    build:
+      context: ../../chat-and-real-time
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: development
+      PORT: 8080
+      MONGO_URI: mongodb://chat-mongo:27017
+      MONGO_DB_NAME: discordia_chat
+      LOG_LEVEL: info
+      SERVICE_NAME: chat
+      RABBITMQ_URL: amqp://rabbitmq:5672/
+    depends_on:
+      chat-mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - red-local
+      - default
+
+  api-gateway-2:
+    build:
+      context: ../../api-gateway
+    ports:
+      - "8082:8080"
+    environment:
+      ENVIRONMENT: development
+      LOG_LEVEL: debug
+      JWT_SECRET: super-secret-key-change-in-production-1234567890
+      JWT_ISSUER: ""
+      JWT_AUDIENCE: ""
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:3000"
+      BUS_DRIVER: log
+      UPSTREAM_IDENTITY_URL: http://identity-service:8001
+      UPSTREAM_COMMUNITY_URL: http://community-service:8000
+      UPSTREAM_CHAT_URL: http://chat-service-2:8080
+    depends_on:
+      - chat-service-2
+    networks:
+      - red-local
+      - default

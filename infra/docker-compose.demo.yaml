@@ -1,0 +1,47 @@
+# Variante para pruebas y debugging — NO usar para la demo frente al corrector.
+#
+# Se corre encadenado sobre los otros dos archivos, nunca solo:
+#
+#   docker compose -f docker-compose.yaml -f docker-compose.override.yaml -f docker-compose.demo.yaml up --build
+#
+# Expone al host los servicios y bases de datos que docker-compose.override.yaml
+# cierra con `ports: !reset []`, para poder pegarles directo con curl/Postman o
+# un cliente de DB mientras se debuggea un flujo puntual.
+#
+# Los puertos externos coinciden con los contratos OpenAPI (arquitectura/contratos/):
+#   - api-gateway: 8080 (ya expuesto por el override)
+#   - identity: 8001
+#   - community: 8002
+#   - chat: 8003
+#
+# Los puertos de bases de datos son distintos a los estándar (5432, 27017, etc.) para no
+# chocar con instancias locales que ya tengas corriendo.
+
+services:
+  identity-service:
+    ports:
+      - "8001:8001"
+
+  community-service:
+    ports:
+      - "8002:8000"
+
+  chat-service:
+    ports:
+      - "8003:8080"
+
+  identity-db:
+    ports:
+      - "5433:5432"
+
+  identity-redis:
+    ports:
+      - "6380:6379"
+
+  community-db:
+    ports:
+      - "5434:5432"
+
+  chat-mongo:
+    ports:
+      - "27018:27017"

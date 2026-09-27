@@ -1,0 +1,9 @@
+include:
+  - ../../api-gateway/compose.yaml
+  - ../../identity/docker-compose.yml
+  - ../../chat-and-real-time/docker-compose.yml
+  - ../../community/docker-compose.yml
+
+networks:
+  red-local:
+    driver: bridge
