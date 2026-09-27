@@ -140,6 +140,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /sessions/verify:
+    post:
+      summary: Verificar validez y estado de revocación de una sesión
+      description: >
+        CA 5: Permite al API Gateway comprobar si un access token sigue activo
+        o si ya fue revocado mediante DELETE /sessions.
+      operationId: verifySession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyTokenRequest'
+      responses:
+        '204':
+          description: Token válido y sesión activa.
+        '401':
+          description: Token inválido, expirado o sesión revocada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Formato de petición inválido (cuerpo o token faltante).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+
   /users/me:
     get:
       summary: Ver el perfil propio
@@ -459,3 +489,12 @@ components:
           type: string
         instance:
           type: string
+
+    VerifyTokenRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: JWT a verificar (con o sin prefijo 'Bearer ').
+
