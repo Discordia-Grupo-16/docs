@@ -270,12 +270,14 @@ agotan se apaga *todo* el CI. Con `govulncheck` y `gosec` ya cubiertos, aporta p
 
 ## El bus de eventos
 
-`community` tiene `BUS_URL=redis://localhost:6379` en su `.env.example`; `api-gateway`
-tiene `BUS_DRIVER` con opciones `noop | log | rabbitmq` y `BUS_URL=amqp://`. **Dos repos,
-dos tecnologías, y ADR-0003 en `Propuesto` sin decisión.** Redis Pub/Sub no está entre las
-cuatro opciones que ese ADR evalúa.
+El broker es **RabbitMQ** (ADR-0003, `Aceptado`). `community` todavía tiene
+`BUS_URL=redis://localhost:6379` en su `.env.example`: hay que alinearlo con
+`amqp://` (`api-gateway` ya usa `BUS_DRIVER=rabbitmq`).
 
-El CI no levanta ningún contenedor de bus: ningún test publica eventos todavía. Cuando
-haya tests de integración, se agrega un input `needs-<broker>` y el bloque de service — y
-recién después de que el ADR esté cerrado. Es 1 punto que bloquea INF-05 e INF-06, que
-son 6.
+`go-service.yml` levanta un `rabbitmq:4-management` en el job de tests con el input
+`needs-rabbitmq: true`, igual que `needs-mongo` para Mongo. Se prende en los repos con
+tests de integración que se saltan solos sin broker, hoy `chat-and-real-time` (los tests
+de `internal/bus`): un test que se saltea en silencio en el CI es un test que no existe.
+Los tests que levantan sus propios contenedores con testcontainers (como
+`internal/integration` en chat) no necesitan el input, solo Docker, que ya trae
+`ubuntu-latest`.

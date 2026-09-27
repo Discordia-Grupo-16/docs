@@ -1,6 +1,6 @@
 %% Discordia - Arquitectura de alto nivel
 %% Fuente unica del diagrama. Editar aca, no en una imagen exportada.
-%% Ver: adr/0001, adr/0002, adr/0003, adr/0008, adr/0009
+%% Ver: adr/0001, adr/0002, adr/0003, adr/0008, adr/0009, adr/0010
 %% Dos caminos, y no hay que mezclarlos:
 %%   cliente -> gateway -> servicio : HTTP sincronico, el gateway hace de proxy (ADR-0009)
 %%   servicio -> bus -> consumidores: eventos, asincronico, unica via entre servicios
@@ -15,6 +15,8 @@ flowchart TB
     end
 
     gw["api-gateway<br/>Go<br/>auth JWT / rate limit / ruteo / proxy"]
+
+    redis[("Redis<br/>blacklist de tokens")]
 
     subgraph python["Python + FastAPI + PostgreSQL"]
         identity["identity<br/>usuarios / auth / perfil"]
@@ -43,6 +45,9 @@ flowchart TB
     gw == "WebSocket<br/>ADR-0008" ==> chat
     gw -. "sin contrato todavia" .-> mod
     gw -. "sin contrato todavia" .-> monetization
+
+    gw -- "consulta jti<br/>ADR-0010" --> redis
+    identity -- "escribe jti en logout<br/>ADR-0010" --> redis
 
     identity <--> bus
     community <--> bus

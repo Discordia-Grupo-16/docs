@@ -10,6 +10,7 @@ Plataforma de comunidades con servidores, canales de texto y de voz, mensajería
 
 - Los tres clientes hablan **solo** con `api-gateway`.
 - El gateway resuelve cada request del cliente como **proxy sincrónico** al servicio dueño del recurso y le devuelve la respuesta tal cual ([ADR-0009](../adr/0009-gateway-proxy-sincronico-para-requests-del-cliente.md)). **El gateway no publica al bus:** el evento lo publica el servicio, después de confirmar la escritura en su base.
+- Antes de reenviar una request autenticada, el gateway consulta una **blacklist en Redis** para verificar que el token no fue revocado por un logout ([ADR-0010](../adr/0010-revocacion-de-tokens-con-redis.md)). `identity` escribe el `jti` en Redis al hacer logout; el registro expira solo con el TTL del token.
 - **Entre servicios backend, asíncrono siempre.** No hay llamadas sincrónicas servicio→servicio: el [ADR-0004](../adr/0004-comunicaciones-sincronicas.md) las evaluó y las rechazó. Un servicio que necesita un dato ajeno lo recibe por evento y lo proyecta localmente.
 - **Una base de datos por servicio.** Ningún servicio lee la base de otro; si necesita un dato ajeno, llega por evento.
 - `metrics` se suscribe a los eventos de **todos** los servicios.
