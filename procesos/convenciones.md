@@ -8,7 +8,7 @@ Ver [`git-workflow.md`](git-workflow.md#repos).
 
 ## Servicios
 
-Minúscula, guion medio, en inglés y en singular salvo que el plural sea el dominio: `identity`, `community`, `mod`, `monetization`, `chat-and-real-time`, `notifications`, `metrics`.
+Minúscula, guion medio, en inglés y en singular salvo que el plural sea el dominio: `identity`, `community`, `monetization`, `chat-and-real-time`, `notifications`, `metrics`.
 
 ## HTTP
 

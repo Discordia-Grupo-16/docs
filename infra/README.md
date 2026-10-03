@@ -110,7 +110,6 @@ Esta variante **no se usa para la demo frente al corrector** — ahí corre solo
 
 Este compose cubre el camino crítico del CP1 (identity, community, chat, gateway). Todavía no incluye:
 
-- `mod` (Roles y Permisos, Moderación)
 - `notifications`
 - `metrics`
 - `monetization`
@@ -128,7 +127,7 @@ A medida que un servicio nuevo entra en alcance de un checkpoint, agregar su lí
 
 ## Pendientes antes de darlo por cerrado
 
-1. **Documentar la conexión a RabbitMQ para el resto de los servicios.** Ya sabemos dónde vive el broker, pero falta confirmar acá (o en `arquitectura/eventos.md`) qué variables de entorno espera cada servicio para conectarse (host, puerto, credenciales), para que quien agregue `mod`, `notifications` o `metrics` a este compose sepa cómo apuntarlo sin tener que leer el compose de `api-gateway` primero.
+1. **Documentar la conexión a RabbitMQ para el resto de los servicios.** Ya sabemos dónde vive el broker, pero falta confirmar acá (o en `arquitectura/eventos.md`) qué variables de entorno espera cada servicio para conectarse (host, puerto, credenciales), para que quien agregue `notifications` o `metrics` a este compose sepa cómo apuntarlo sin tener que leer el compose de `api-gateway` primero.
 2. **Confirmar si `docker-compose.demo.yaml` necesita también exponer el puerto de RabbitMQ** (para inspeccionar colas con la management UI durante el debugging) — depende de cómo lo haya expuesto el compañero que lo subió en `api-gateway`.
 
 ## Referencias
