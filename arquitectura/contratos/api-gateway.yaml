@@ -11,7 +11,7 @@ info:
     únicamente las políticas transversales documentadas en INF-10.
 
     Correspondencia de ruteo para el camino crítico del Sprint 1:
-    - /api/v1/users*, /api/v1/sessions* → identity
+    - /api/v1/users*, /api/v1/sessions*, /api/v1/password-resets* → identity
     - /api/v1/servers*, /api/v1/invites* → community
     - /api/v1/channels/{channelId}/messages, /api/v1/channels/{channelId}/ws → chat-y-real-time
 
@@ -66,6 +66,36 @@ paths:
           $ref: '#/components/responses/UnprocessableEntity'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+
+    get:
+      summary: '[proxy → identity] Ver perfiles públicos por lote'
+      operationId: gatewayGetPublicUsers
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: ids
+          required: true
+          description: UUID separados por coma, entre 1 y 100.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ver identity.yaml → GET /users
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'identity.yaml#/components/schemas/PublicUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
 
   /api/v1/sessions:
     post:
@@ -185,6 +215,75 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /api/v1/users/{userId}:
+    get:
+      summary: '[proxy → identity] Ver el perfil público de un usuario'
+      operationId: gatewayGetPublicUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ver identity.yaml → GET /users/{userId}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'identity.yaml#/components/schemas/PublicUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/v1/password-resets:
+    post:
+      summary: '[proxy → identity] Pedir el link para restablecer la contraseña'
+      description: Ruta pública. Tiene su propio límite por IP (CA5 de SCRUM-20).
+      operationId: gatewayRequestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'identity.yaml#/components/schemas/PasswordResetRequest'
+      responses:
+        '202':
+          description: Ver identity.yaml → POST /password-resets
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/password-resets/confirmations:
+    post:
+      summary: '[proxy → identity] Fijar la contraseña nueva con el token del link'
+      description: Ruta pública. Tiene su propio límite por IP (CA5 de SCRUM-20).
+      operationId: gatewayConfirmPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'identity.yaml#/components/schemas/PasswordResetConfirmRequest'
+      responses:
+        '204':
+          description: Ver identity.yaml → POST /password-resets/confirmations
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   /api/v1/servers:
     post:
       summary: '[proxy → community] Crear servidor'
@@ -204,6 +303,37 @@ paths:
           $ref: '#/components/responses/UnprocessableEntity'
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+    get:
+      summary: '[proxy → community] Listar los servidores del usuario'
+      operationId: gatewayListServers
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: withUser
+          required: false
+          description: Id del usuario con el que se comparten los servidores.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ver community.yaml → GET /servers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'community.yaml#/components/schemas/Server'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
 
   /api/v1/servers/{serverId}:
     get:

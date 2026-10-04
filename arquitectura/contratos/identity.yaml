@@ -6,9 +6,9 @@ info:
     Servicio `identity`. Cubre las épicas Usuarios y Perfil para el camino
     crítico del Sprint 1 (CP1): Registro de usuarios (#1), Login con email y
     contraseña (#2), Edición de perfil (#4) y Visualización de perfil propio (#5).
-    Fuera de alcance en este sprint: recupero de contraseña, login federado,
-    PIN, 2FA y perfil público — se agregan en un sprint posterior sin romper
-    este contrato.
+    Fuera de alcance: login federado, PIN y 2FA. El perfil público
+    (SCRUM-26) y el recupero de contraseña (SCRUM-20, objetivo ideal) se
+    incorporan en el Sprint 2 sin romper este contrato.
 
 servers:
   - url: http://localhost:8001
@@ -47,6 +47,48 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Email con formato inválido o contraseña que no cumple los requisitos mínimos (CA3, CA4).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      summary: Ver perfiles públicos por lote
+      description: >
+        Lo usa el cliente, a través del gateway, para resolver nombre y avatar
+        de los autores de mensajes y de los miembros de un servidor en un solo
+        pedido (SCRUM-26). Requiere sesión. `ids` lleva entre 1 y 100 UUID
+        separados por coma. Los ids que no existen y los de cuentas suspendidas
+        no vienen en la respuesta, sin error: el cliente muestra "Usuario no
+        disponible" para los que faltan. El orden de la respuesta no está
+        garantizado. Devuelve únicamente campos públicos, nunca email ni datos
+        privados (RNF — Minimización de datos en APIs).
+      operationId: getPublicUsers
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+        - in: query
+          name: ids
+          required: true
+          description: UUID separados por coma, entre 1 y 100.
+          schema:
+            type: string
+          example: 3f1c2d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f,9b8a7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d
+      responses:
+        '200':
+          description: Perfiles públicos de las cuentas encontradas y activas.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PublicUser'
+        '422':
+          description: "`ids` vacío, con un UUID inválido o con más de 100 elementos."
           content:
             application/problem+json:
               schema:
@@ -284,13 +326,15 @@ paths:
 
   /users/{userId}:
     get:
-      summary: Ver datos básicos de un usuario por id (uso interno / entre servicios)
+      summary: Ver el perfil público de un usuario
       description: >
-        No corresponde a una historia de usuario final de este sprint (el
-        perfil público es optativo y no está en el CP1). Se expone para que
-        `community` y `chat` puedan resolver nombre y avatar al mostrar
-        miembros, autores de mensajes, etc. Devuelve únicamente campos
-        públicos — nunca email ni contraseña (RNF — Minimización de datos en APIs).
+        Historia optativa "Visualización de perfil público" (SCRUM-26). Lo usa
+        el cliente, a través del gateway, al tocar un autor o un miembro;
+        ningún servicio lo llama (el ADR-0004 fue rechazado). Requiere sesión.
+        Devuelve únicamente campos públicos — nunca email ni contraseña (RNF —
+        Minimización de datos en APIs). Los servidores en común no vienen
+        acá: están en `community` (`GET /servers?withUser=`) y el cliente
+        combina las dos respuestas.
       operationId: getUserPublicById
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -313,7 +357,97 @@ paths:
                   data:
                     $ref: '#/components/schemas/PublicUser'
         '404':
-          description: Usuario inexistente.
+          description: >
+            Usuario inexistente o cuenta suspendida (CA3). Es la misma
+            respuesta en los dos casos, con `detail` "El perfil no está
+            disponible", para no revelar si la cuenta existe.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: "`userId` con formato de UUID inválido."
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /password-resets:
+    post:
+      summary: Pedir el link para restablecer la contraseña
+      description: >
+        Reservado para la historia ideal "Recupero de contraseña" (SCRUM-20).
+        Si el email corresponde a una cuenta, `identity` genera un token de
+        32 bytes aleatorios (256 bits), guarda solo su SHA-256, lo hace vencer
+        en 1 hora y manda por email un link a la web con el token en la query.
+        **Siempre responde `202` con el mismo mensaje**, exista o no el email
+        (CA4), para no revelar qué cuentas existen. Sin sesión. Límites (CA5):
+        por IP en el gateway y por cuenta en `identity`; ambos responden `429`.
+      operationId: requestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+      responses:
+        '202':
+          description: Pedido recibido. El mensaje es el mismo exista o no la cuenta.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [message]
+                    properties:
+                      message:
+                        type: string
+                        example: Si el email corresponde a una cuenta, te enviamos un link para restablecer la contraseña.
+        '422':
+          description: Email con formato inválido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Demasiados pedidos desde esta IP o para esta cuenta.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /password-resets/confirmations:
+    post:
+      summary: Fijar la contraseña nueva con el token del link
+      description: >
+        Reservado para SCRUM-20. El token sirve una sola vez y vence a la hora
+        de emitido. Al usarse, `identity` guarda la contraseña nueva y revoca
+        las sesiones activas de la cuenta (ADR-0010). Sin sesión. El token
+        viaja en el body y no en la URL para que no quede en los logs.
+      operationId: confirmPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+      responses:
+        '204':
+          description: Contraseña actualizada y sesiones anteriores revocadas.
+        '422':
+          description: >
+            Token inexistente, vencido o ya usado (CA2), todos con el mismo
+            `detail` ("El enlace no es válido o venció. Pedí uno nuevo."), o
+            contraseña que no cumple los requisitos mínimos.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Demasiados intentos desde esta IP.
           content:
             application/problem+json:
               schema:
@@ -396,7 +530,7 @@ components:
     PublicUser:
       type: object
       description: Subconjunto público de User, sin email ni datos sensibles.
-      required: [id, name, avatarUrl]
+      required: [id, name, avatarUrl, bio]
       properties:
         id:
           type: string
@@ -406,6 +540,9 @@ components:
         avatarUrl:
           type: string
           format: uri
+          nullable: true
+        bio:
+          type: string
           nullable: true
 
     AuthResult:
@@ -475,6 +612,26 @@ components:
           type: string
           format: email
         password:
+          type: string
+          minLength: 8
+          description: Mínimo 8 caracteres, al menos una mayúscula, una minúscula y un número.
+
+    PasswordResetRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    PasswordResetConfirmRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+          description: Token del link recibido por email (32 bytes aleatorios en base64url).
+        newPassword:
           type: string
           minLength: 8
           description: Mínimo 8 caracteres, al menos una mayúscula, una minúscula y un número.
