@@ -1,0 +1,71 @@
+%% chat - topología de RabbitMQ
+%% Un único topic exchange; la semántica la decide cómo se declara cada cola.
+%% COMPARTIDA: durable, nombre fijo, DLQ propia; las réplicas compiten y cada evento se procesa una vez (escribe en Mongo).
+%% POR INSTANCIA: exclusive + auto-delete, nombre generado por el broker, sin DLQ; todas las instancias reciben todo.
+%% RIESGO: si chat.message.sent se declarara compartida, el mensaje llegaría a UNA sola instancia, sin error ni log.
+
+flowchart LR
+    subgraph productores["Publican"]
+        com["community"]
+        p1["chat #1"]
+        p2["chat #2"]
+    end
+
+    ex{{"discordia.events<br/>topic · durable<br/>routing key = eventType"}}
+
+    com -- "community.channel.*<br/>community.member.*" --> ex
+    p1 -- "chat.message.sent<br/>chat.membership.changed" --> ex
+    p2 -- "chat.message.sent<br/>chat.membership.changed" --> ex
+
+    subgraph colas["Colas"]
+        q1["chat.community-projection<br/><b>COMPARTIDA</b> · durable · nombre fijo<br/>x-dead-letter-exchange"]
+        a1["amq.gen-… · chat #1 · mensajes<br/><b>POR INSTANCIA</b> · exclusive · auto-delete"]
+        a2["amq.gen-… · chat #1 · relevo membresías<br/><b>POR INSTANCIA</b> · exclusive · auto-delete"]
+        b1["amq.gen-… · chat #2 · mensajes<br/><b>POR INSTANCIA</b> · exclusive · auto-delete"]
+        b2["amq.gen-… · chat #2 · relevo membresías<br/><b>POR INSTANCIA</b> · exclusive · auto-delete"]
+        qm["metrics · binding #<br/>(planificado)"]
+    end
+
+    ex -- "community.channel.created<br/>community.channel.deleted<br/>community.member.joined<br/>community.member.left" --> q1
+    ex -- "chat.message.sent" --> a1
+    ex -- "chat.membership.changed" --> a2
+    ex -- "chat.message.sent" --> b1
+    ex -- "chat.membership.changed" --> b2
+    ex -. "#" .-> qm
+
+    subgraph deadletter["Dead letter"]
+        dlx{{"discordia.events.dlx<br/>topic"}}
+        dlq["chat.community-projection.dlq<br/>intervención manual"]
+    end
+    q1 -. "payload inválido (Permanent)<br/>o 3 reintentos agotados" .-> dlx
+    dlx -.-> dlq
+
+    %% Handlers de cada instancia:
+    %%   community.*            -> applyIfNewer (lastEventAt) en Mongo + publica chat.membership.changed
+    %%   chat.message.sent      -> hub.Broadcast(serverId) a los sockets suscriptos
+    %%   chat.membership.changed-> HasUser? -> IsActiveMember -> (Un)SubscribeUser
+    c1["chat #1 (consume)<br/>proyección → Mongo<br/>mensajes → hub.Broadcast<br/>relevo → (Un)Subscribe"]
+    c2["chat #2 (consume)<br/>proyección → Mongo<br/>mensajes → hub.Broadcast<br/>relevo → (Un)Subscribe"]
+
+    q1 -- "compiten: cada evento<br/>lo aplica UNA instancia" --> c1
+    q1 -- "compiten" --> c2
+    a1 --> c1
+    a2 --> c1
+    b1 --> c2
+    b2 --> c2
+
+    classDef prod fill:#e9ecef,stroke:#495057
+    classDef exchange fill:#ffec99,stroke:#e67700
+    classDef shared fill:#b2f2bb,stroke:#2b8a3e
+    classDef perinst fill:#a5d8ff,stroke:#1971c2
+    classDef dead fill:#ffc9c9,stroke:#c92a2a
+    classDef go fill:#a5d8ff,stroke:#1971c2
+    classDef pendiente fill:#ffffff,stroke:#868e96,stroke-dasharray:5 5,color:#868e96
+
+    class com,p1,p2 prod
+    class ex exchange
+    class q1 shared
+    class a1,a2,b1,b2 perinst
+    class dlx,dlq dead
+    class c1,c2 go
+    class qm pendiente

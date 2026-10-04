@@ -1,0 +1,35 @@
+%% Secuencia - A envía un mensaje (camino dentro de chat hasta publicar al bus)
+%% El gateway copia frames en los dos sentidos sin interpretarlos (ADR-0008).
+%% Todo lo de chat 1 corre en la goroutine readPump de A: orden por emisor.
+
+sequenceDiagram
+    autonumber
+    actor A as Cliente A (web)
+    participant GW as api-gateway
+    participant C1 as chat 1
+    participant M as MongoDB (chat-mongo)
+    participant R as RabbitMQ (discordia.events)
+
+    A->>GW: message.send {channelId, content, clientMessageId}
+    GW->>C1: frame copiado sin interpretar
+    Note over C1: correlationId nuevo por frame<br/>CA2: no vacío · CA4: ≤ 2000 runes (sin I/O)
+    alt vacío o más largo que MAX_MESSAGE_LENGTH
+        C1-->>GW: error EMPTY_MESSAGE / MESSAGE_TOO_LONG
+        GW-->>A: error (síncrono, nunca por el bus)
+    else contenido válido
+        C1->>M: CA3: channels por _id (no borrado)<br/>memberships serverId:userId activo
+        M-->>C1: canal (serverId) · membresía
+        alt canal inexistente, no miembro o Mongo caído
+            C1-->>GW: error CHANNEL_NOT_FOUND / FORBIDDEN / INTERNAL_ERROR
+            GW-->>A: error (síncrono, nunca por el bus)
+        else autorizado
+            C1->>M: insertOne messages<br/>índice único {channelId, clientMessageId}
+            M-->>C1: ok (si es reenvío: el mensaje original)
+            C1-->>GW: message.ack {clientMessageId, messageId, createdAt}
+            GW-->>A: message.ack
+            Note over A: saca el "enviando…" (todavía no lo pinta)
+            opt no es un reenvío
+                C1->>R: publish chat.message.sent<br/>{messageId, channelId, serverId, authorId,<br/>content, createdAt, clientMessageId} + correlationId
+            end
+        end
+    end
