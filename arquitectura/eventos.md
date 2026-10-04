@@ -85,6 +85,7 @@ Sobre ese exchange hay dos formas de declarar una cola, y **no son intercambiabl
 
 - **Cola compartida** para consumir los eventos de `community` que alimentan su proyección de autorización: el Mongo de `chat` es uno solo, no tiene sentido que tres instancias apliquen el mismo `member.joined` tres veces.
 - **Cola por instancia** para `chat.message.sent`: cada instancia tiene un conjunto distinto de clientes WebSocket conectados, así que cada una necesita enterarse de **todos** los mensajes para reenviárselos a los suyos.
+- **Cola por instancia** para `identity.user.suspended`: los sockets del usuario suspendido pueden estar en cualquier instancia, así que todas tienen que enterarse para cerrar los suyos.
 - **Cola por instancia** para `chat.membership.changed`, el relevo interno de membresías: la instancia que aplica un `member.joined` o `.left` a la proyección no sabe cuál tiene al usuario conectado, así que avisa a todas y cada una actualiza las suscripciones de sus propias conexiones.
 
 **Riesgo a tener presente:** si `chat.message.sent` se declara por error como cola compartida, el mensaje le llega a una sola instancia — es decir, a una fracción de los usuarios conectados. No tira error, solo un cliente que nunca recibe nada, y es muy difícil de diagnosticar sin saber que la topología estaba mal desde el arranque. Por eso queda escrito acá y no solo en la cabeza de quien lo implementa.
@@ -105,6 +106,8 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 | `community.member.permissions_changed` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61 |
 | `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId }` | SCRUM-41 |
 | `chat.membership.changed` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ serverId, userId }` ² | SCRUM-146 |
+| `identity.user.suspended` | `identity` | `chat` (cierre de sockets, cola por instancia), `metrics` (fan-out) | `{ userId, suspendedBy }` ⁵ | SCRUM-81 |
+| `identity.user.reactivated` | `identity` | `metrics` (fan-out) | `{ userId, reactivatedBy }` ⁵ | SCRUM-82 |
 
 ¹ Payload de los cinco eventos de `community` propuesto por `chat`, que es quien primero los necesita (proyección local de autorización). Es una propuesta, no el contrato: el dueño de `community` la confirma o la reemplaza en la historia que implementa cada evento y actualiza esta tabla en ese PR. Para el CP1 solo son obligatorios `member.joined` y `channel.created` (la demo depende de ellos); `chat` ya consume también `member.left` y `channel.deleted`, y se catalogan todos ahora para que el nombre y el payload no cambien cuando se implementen. `channel.updated` no lo consume `chat`: el nombre y el tipo de un canal no cambian quién puede escribir en él (la regla del CP1 es que ser miembro del servidor habilita todos sus canales), así que su cola ni siquiera se bindea a ese evento.
 
@@ -133,6 +136,13 @@ Reglas de publicación:
 - **Cola compartida**, como los demás eventos de `community`: escribe en el Mongo de `chat`, que es uno solo.
 - **Si el servidor es muy grande**, el productor puede partir el cambio en varios eventos con un subconjunto de `members` cada uno. No cambia el contrato: el consumidor ya aplica entrada por entrada.
 - El bitmask **no viaja en el JWT**: cambia sin que el token cambie.
+
+⁵ Suspensión de cuentas. `userId` es la cuenta suspendida o reactivada; `suspendedBy` y `reactivatedBy`, el `userId` del staff que hizo la acción (queda para la auditoría). El momento es el `occurredAt` del envelope: no se repite en `data`.
+
+- **Orden dentro de `identity`:** primero marca la cuenta, después revoca todas sus sesiones (borra los refresh tokens y pone cada `jti` de access token en el denylist de Redis, [ADR-0010](../adr/0010-revocacion-de-tokens-con-redis.md)) y recién después publica. Así, cuando `chat` cierra el socket, el cliente ya no puede volver a entrar: el gateway rechaza el token tanto en la API como en el handshake del WebSocket.
+- **Qué hace `chat`:** cada instancia cierra los sockets de ese `userId` con el código `4403` (ver el endpoint del WebSocket en [`contratos/chat.yaml`](contratos/chat.yaml)). Solo cierra las conexiones **abiertas antes** del `occurredAt` del evento: si el evento llega tarde, después de una reactivación y un login nuevo, no corta la sesión nueva. Con esa regla el handler no guarda estado y es idempotente: un duplicado no encuentra nada que cerrar.
+- **Si una instancia estaba caída** cuando se publicó el evento, se lo pierde (la cola por instancia nace al conectar), pero tampoco tenía sockets: se cayeron con ella, y al reconectar el gateway ya rechaza el token.
+- **`reactivated` no lo consume `chat`:** no hay nada que reabrir. El usuario vuelve a loguearse y obtiene un token nuevo. El perfil público lo resuelve `identity` con su propio estado, sin eventos.
 
 ## Nota sobre los dos lenguajes
 
