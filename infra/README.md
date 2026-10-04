@@ -17,7 +17,7 @@ Este `docker-compose.yaml` levanta **todos los servicios a la vez**, para ensaya
 
 ```
 discordia/
-├── docs/                      (o discordia-docs/)
+├── docs/
 │   └── infra/
 │       ├── docker-compose.yaml
 │       ├── docker-compose.override.yaml
