@@ -102,7 +102,7 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 | `community.channel.deleted` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ channelId }` ¹ | SCRUM-137 |
 | `community.member.joined` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ serverId, userId }` ¹ | SCRUM-137 |
 | `community.member.left` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ serverId, userId, reason }` ¹ ³ | SCRUM-137, SCRUM-68, SCRUM-69 |
-| `community.member.permissions_changed` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ serverId, userId, permissions }` ⁴ | SCRUM-61 |
+| `community.member.permissions_changed` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61 |
 | `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId }` | SCRUM-41 |
 | `chat.membership.changed` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ serverId, userId }` ² | SCRUM-146 |
 
@@ -112,12 +112,26 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 
 ³ `reason` dice **por qué** terminó la membresía: `left` (se fue solo), `kicked` (lo expulsaron) o `banned` (lo banearon). Agregar el campo es compatible hacia atrás y no obliga a tocar Go: `chat` ya corta el acceso con este evento desde SCRUM-137 y SCRUM-146, y puede seguir ignorando el campo. Existe para que `metrics` distinga una baja voluntaria de una sanción, y para que la interfaz pueda explicarle al usuario por qué perdió el acceso. Un consumidor que reciba un `reason` que no conoce lo trata como `left`.
 
-⁴ **Permisos efectivos de un miembro en un servidor**, decididos por el [ADR-0011](../adr/0011-roles-y-permisos-en-community.md). `permissions` es el bitmask **ya calculado** por `community`: el OR de los permisos de todos los roles del miembro, con el owner en todos los bits y `ADMINISTRATOR` implicando el resto. `chat` lo guarda tal cual en su proyección `memberships` y **solo chequea bits**; no rehace el OR ni la jerarquía en Go. Reglas de publicación:
+⁴ **Permisos efectivos de los miembros de un servidor**, decididos por el [ADR-0011](../adr/0011-roles-y-permisos-en-community.md). Cada `permissions` es el bitmask **ya calculado** por `community`: el OR de los permisos de todos los roles de ese miembro, con el owner en todos los bits y `ADMINISTRATOR` implicando el resto. `chat` lo guarda tal cual en su proyección `memberships` y **solo chequea bits**; no rehace el OR ni la jerarquía en Go.
+
+```json
+{
+  "serverId": "0f4e...",
+  "members": [
+    { "userId": "a1b2...", "permissions": 73 },
+    { "userId": "c3d4...", "permissions": 511 }
+  ]
+}
+```
+
+Reglas de publicación:
 
 - **Cuándo se publica:** al editar los permisos de un rol, al asignar o quitar un rol a un miembro, y al entrar un miembro nuevo al servidor (con lo que le dé el rol por defecto, o `0` si no hay).
-- **Un evento por miembro afectado**, no uno por servidor. Editar un rol que tienen 50 miembros publica 50 eventos. Es a propósito: con un evento por servidor, `chat` tendría que saber qué miembros tienen qué roles y rehacer el cálculo, que es justamente lo que el ADR-0011 evita.
-- **Idempotencia y orden:** se aplica con la misma regla que el resto de la proyección — el evento entrante se aplica solo si su `occurredAt` es más nuevo que el `lastEventAt` guardado para esa membresía. Sin eso, dos ediciones seguidas del mismo rol pueden llegar al revés y dejar permisos viejos.
+- **Un evento por cambio, no uno por miembro.** `members` trae **solo los miembros afectados**, no todo el servidor: editar un rol que tienen 50 personas publica un evento con 50 entradas, y asignarle un rol a alguien publica uno con una sola. El hecho de negocio es el cambio, y cincuenta eventos serían cincuenta copias del mismo hecho con `eventId` distintos y nada que los relacione.
+- **El cálculo no se delega.** La alternativa de mandar solo `{ serverId, roleId }` obligaría a `chat` a proyectar roles y asignaciones y a rehacer el OR en Go, que es justo lo que el ADR-0011 evita. Por eso el evento lleva los bitmasks resueltos aunque sea más grande.
+- **Idempotencia y orden:** se aplica **por entrada de `members`**, con la misma regla que el resto de la proyección — cada miembro se actualiza solo si el `occurredAt` del evento es más nuevo que el `lastEventAt` guardado para esa membresía. Sin eso, dos ediciones seguidas del mismo rol pueden llegar al revés y dejar permisos viejos. Como la regla se evalúa por miembro, reprocesar el evento entero es seguro.
 - **Cola compartida**, como los demás eventos de `community`: escribe en el Mongo de `chat`, que es uno solo.
+- **Si el servidor es muy grande**, el productor puede partir el cambio en varios eventos con un subconjunto de `members` cada uno. No cambia el contrato: el consumidor ya aplica entrada por entrada.
 - El bitmask **no viaja en el JWT**: cambia sin que el token cambie.
 
 ## Nota sobre los dos lenguajes

@@ -120,13 +120,33 @@ consecuencias: lo que se escribe en los dos lenguajes se desincroniza.
 
 ### Cómo viaja
 
-`community` publica **`community.member.permissions_changed`** con el bitmask efectivo ya calculado,
-**un evento por miembro afectado**, cada vez que cambian los permisos de un rol, cambia la asignación
-de roles de un miembro, o entra un miembro nuevo. El payload y las reglas de idempotencia están en
-[`eventos.md`](../arquitectura/eventos.md).
+`community` publica **`community.member.permissions_changed`** cada vez que cambian los permisos de
+un rol, cambia la asignación de roles de un miembro, o entra un miembro nuevo. El evento lleva el
+servidor y la **lista de los miembros afectados con su bitmask ya calculado**:
 
-Un evento por miembro y no uno por servidor: con un evento por servidor, `chat` tendría que saber
-qué miembros tienen qué roles y rehacer el OR en Go, que es justamente lo que esta decisión evita.
+```json
+{ "serverId": "0f4e...", "members": [{ "userId": "a1b2...", "permissions": 73 }] }
+```
+
+**Un evento por cambio, no uno por miembro.** Editar un rol que tienen 50 personas publica un evento
+con 50 entradas; asignarle un rol a alguien publica uno con una sola. Se eligió así por tres
+razones:
+
+1. **Escala en cantidad de eventos.** Un cambio de rol en un servidor grande no se convierte en una
+   ráfaga de mensajes, cada uno con su envelope completo.
+2. **El hecho de negocio es el cambio, no el miembro.** Cincuenta eventos serían cincuenta copias
+   del mismo hecho, con `eventId` distintos y nada que los relacione entre sí.
+3. **Cubre los tres casos con una sola forma.** Un miembro afectado o cincuenta es la misma
+   estructura, con un array de largo distinto.
+
+Se descartó mandar solo `{ serverId, roleId, permissions }`, que sería el mensaje más chico:
+obligaría a `chat` a proyectar roles y asignaciones y a rehacer el OR y la jerarquía en Go, que es
+exactamente lo que esta decisión evita. El evento lleva los bitmasks resueltos aunque pese más.
+
+El costo aceptado es que el mensaje crece con la cantidad de miembros afectados. Si alguna vez
+molestara, el productor parte el cambio en varios eventos con un subconjunto de `members` cada uno,
+sin tocar el contrato: el consumidor ya aplica entrada por entrada. El payload completo y las reglas
+de idempotencia están en [`eventos.md`](../arquitectura/eventos.md).
 
 El bitmask **no viaja en el JWT**: cambia sin que el token cambie, y un token vive más que una
 edición de permisos.
