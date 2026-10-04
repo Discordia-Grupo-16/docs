@@ -1,9 +1,19 @@
 # ADR-0001: Stack y lenguajes por microservicio
 
-- **Estado:** Aceptado
+- **Estado:** Modificado parcialmente por [ADR-0011](0011-roles-y-permisos-en-community.md)
 - **Fecha:** 2026-09-04
 - **Decisores:** equipo completo (reunión de kickoff)
 - **Servicios afectados:** todos
+
+> **Qué sigue vigente y qué no.** El [ADR-0011](0011-roles-y-permisos-en-community.md) decidió no
+> crear el servicio `mod` y dejar roles, permisos y baneos en `community`.
+>
+> - **Sigue vigente:** los dos lenguajes de backend, el criterio de reparto por perfil de carga, las
+>   bases de datos de cada servicio y el stack de los tres artefactos de front.
+> - **Queda sin efecto:** la fila de `mod` en la tabla de abajo. Sus responsabilidades se reparten
+>   entre `community` (roles, permisos y baneos) e `identity` (suspensión de cuentas).
+>
+> La tabla se conserva sin editar: es el registro de lo que se decidió en el kickoff.
 
 ## Contexto
 
