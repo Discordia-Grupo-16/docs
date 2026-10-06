@@ -18,7 +18,7 @@ Si agregás un ADR, agregá el renglón acá en el mismo PR.
 | [ADR-0008](0008-proxy-websocket-como-excepcion-al-adr-0002.md) | Proxy WebSocket del gateway hacia `chat` como excepción al ADR-0002 | Propuesto | — |
 | [ADR-0009](0009-gateway-proxy-sincronico-para-requests-del-cliente.md) | El gateway resuelve las requests del cliente como proxy sincrónico | Aceptado | 2026-09-19 |
 | [ADR-0010](0010-revocacion-de-tokens-con-redis.md) | Revocación de tokens JWT con Redis | Propuesto | — |
-| [ADR-0011](0011-roles-y-permisos-en-community.md) | Roles y permisos en `community`, con un bitmask propagado por evento | Propuesto | — |
+| [ADR-0011](0011-roles-y-permisos-en-community.md) | Roles y permisos en `community`, con un bitmask propagado por evento | Aceptado | 2026-10-05 |
 
 ## De servicio (referencia)
 
