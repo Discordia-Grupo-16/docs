@@ -47,7 +47,7 @@ services:
       JWT_SECRET: super-secret-key-change-in-production-1234567890
       JWT_ISSUER: ""
       JWT_AUDIENCE: ""
-      CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:3000"
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:5174,http://localhost:3000"
       BUS_DRIVER: log
       UPSTREAM_IDENTITY_URL: http://identity-service:8001
       UPSTREAM_COMMUNITY_URL: http://community-service:8000
