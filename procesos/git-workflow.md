@@ -9,27 +9,26 @@ Si otro documento dice algo distinto sobre estos temas, manda este.
 
 ## Repos
 
-**Un repo por microservicio**, más los tres de front, el de documentación y el de CI. No
-hay monorepo.
+**Un repo por servicio**, más el de documentación y el de CI. El front (web y mobile) vive
+junto en `web-app`, un monorepo con `apps/web`, `apps/mobile` y los paquetes compartidos
+(`@discordia/services`, `@discordia/realtime`).
 
 Nombres en minúscula, guion medio, **sin prefijo** `discordia-`: la organización ya se
 llama `Discordia-Grupo-16` y repetirlo en cada repo es redundante.
 
-| Repo | Estado |
+| Repo | Qué es |
 | --- | --- |
-| `community` | ok |
-| `api-gateway` | ok |
-| `web-app` | ok |
-| `identity` | ok |
-| `chat-and-real-time` | ok |
-| `docs` | ok |
-| `demo-repository` | **borrar**: es el repo de ejemplo que crea GitHub al armar la org |
-| `discordia-ci` | no es un servicio, es la infraestructura de CI |
+| `api-gateway` | Gateway: autenticación, rate limit y proxy hacia los servicios |
+| `identity` | Cuentas, sesiones y perfiles |
+| `community` | Servidores, canales, roles e invitaciones |
+| `chat-and-real-time` | Mensajes y tiempo real (WebSocket) |
+| `pubsub` | Cliente compartido del bus de eventos |
+| `web-app` | Web y mobile, con los paquetes compartidos |
+| `docs` | Documentación, ADRs y entregas |
+| `discordia-ci` | Infraestructura de CI: workflows reutilizables, que los demás repos usan como `@v1` |
 
-Pendientes de crear, con estos nombres: `monetization`, `notifications`,
-`metrics`, `backoffice`, `mobile`.
-
-
+Los servicios `mod`, `monetization`, `notifications`, `metrics` y `backoffice` no tienen
+repo: el alcance acordado no los incluye (los roles y baneos viven en `community`).
 
 ## Ramas
 
@@ -39,8 +38,11 @@ Pendientes de crear, con estos nombres: `monetization`, `notifications`,
 | `develop` | Integración. De acá salen y acá vuelven todas las features |
 | `<tipo>/SCRUM-XXX-<slug>` | Una rama por historia o task de Jira |
 
-- **Sin commits directos a `develop` ni a `main`.** Las dos están protegidas.
-- `develop` → `main` solo en los checkpoints.
+- **Sin commits directos a `develop` ni a `main`.** Hoy se cumple por proceso, no por
+  configuración (ver [Branch protection](#branch-protection)).
+- `develop` → `main` solo en los checkpoints, con un tag `x.y.z` (sin `v`, anotado): `0.1.0`
+  para el CP1 y `0.2.0` para el CP2. Un fix posterior sube la última cifra. `discordia-ci`
+  conserva `v1`, que es lo que referencian los workflows de los otros repos.
 - Las ramas de trabajo salen siempre de `develop` y se borran después del merge.
 
 Tipos: `feat/` funcionalidad nueva · `fix/` corrección · `chore/` infraestructura, build,
@@ -113,18 +115,25 @@ explicación y sin ticket es peor que el problema que evita.
 
 ## Branch protection
 
-Configurada como ruleset en cada repo, sobre `develop` y `main`:
+**Lo que se quiere**, sobre `develop` y `main`:
 
-- Require a pull request before merging — **1 approval**
-- Allowed merge methods: solo **Merge commit**
-- Require status checks to pass: `lint`, `test`, `build`, `gitleaks`
-- Require branches to be up to date before merging
-- Block force pushes
+- Pull request obligatorio con **1 approval**
+- Solo **Merge commit**
+- Checks obligatorios: `lint`, `test`, `build`, `gitleaks`
+- Rama al día antes de mergear
+- Sin force push
 
-En el PR los checks se muestran como `CI / lint`, `CI / test`, `CI / build`,
-`CI / gitleaks`; en el buscador de rulesets aparecen sin el prefijo. Solo figuran en la
-lista después de la primera corrida del workflow en ese repo, así que el orden es:
-pushear el `ci.yml`, esperar que corra, configurar la protección.
+**Lo que hay de verdad:** nada de eso está configurado. La organización está en el plan
+Free de GitHub, y en los repos privados la API responde 403 tanto a branch protection como
+a rulesets (`docs` y `pubsub`, que son públicos, tampoco la tienen). Hasta que el equipo
+decida (hacer públicos los repos, o aceptar la limitación), la regla se cumple por proceso:
+
+- Nadie pushea a `develop` ni a `main`: todo entra por PR.
+- Nadie mergea con el CI en rojo ni sin approval.
+- Quien revisa mira el CI de `develop` todas las noches.
+
+En el PR los checks se muestran como `CI / lint`, `CI / test`, `CI / build` y
+`CI / gitleaks`.
 
 ## Migraciones de base de datos
 

@@ -7,7 +7,7 @@ Una historia está terminada cuando:
 ## Código
 
 - [ ] Cumple los criterios de aceptación de la historia en Jira
-- [ ] PR mergeado a `dev` con un review aprobado que no es del autor
+- [ ] PR mergeado a `develop` con un review aprobado que no es del autor
 - [ ] CI en verde
 - [ ] Cobertura del repo ≥ 70% (requisito de la consigna) y no bajó respecto de antes del PR
 - [ ] Sin secretos, credenciales ni `.env` en el historial
@@ -26,5 +26,5 @@ Una historia está terminada cuando:
 
 ## Lo que NO es parte de "done"
 
-- Estar desplegado en la nube: eso pasa en el corte a `master` de cada checkpoint.
+- Estar desplegado en la nube: eso pasa en el corte a `main` de cada checkpoint (a revisar: el plan del Sprint 2 pide deploy en la nube para cerrar SCRUM-41).
 - Estar demostrado en la reunión: eso es la revisión del sprint.
