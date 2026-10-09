@@ -26,7 +26,7 @@ llama `Discordia-Grupo-16` y repetirlo en cada repo es redundante.
 | `demo-repository` | **borrar**: es el repo de ejemplo que crea GitHub al armar la org |
 | `discordia-ci` | no es un servicio, es la infraestructura de CI |
 
-Pendientes de crear, con estos nombres: `mod`, `monetization`, `notifications`,
+Pendientes de crear, con estos nombres: `monetization`, `notifications`,
 `metrics`, `backoffice`, `mobile`.
 
 

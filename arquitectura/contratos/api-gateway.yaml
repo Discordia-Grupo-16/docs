@@ -20,7 +20,11 @@ info:
     con dos headers internos derivados de su payload (ver JwtClaims en
     identity.yaml):
     - `X-User-Id`: el `sub` del JWT (userId).
-    - `X-User-Role`: el `role` del JWT (`user` o `staff`).
+    - `X-User-Role`: el `role` del JWT (`user` o `staff`), un solo valor.
+    El gateway siempre pisa esos headers, así que un cliente no puede
+    falsificarlos. Antes de reenviar, también rechaza con 401 los tokens
+    cuyo `jti` está revocado (ADR-0010), incluido el handshake del
+    WebSocket: un usuario suspendido no puede reconectarse.
     Los servicios downstream (`identity`, `community`, `chat-y-real-time`)
     no vuelven a validar la firma del JWT ni lo reciben ellos mismos en la
     mayoría de sus endpoints — confían en esos dos headers dentro de la red
