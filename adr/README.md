@@ -19,6 +19,7 @@ Si agregás un ADR, agregá el renglón acá en el mismo PR.
 | [ADR-0009](0009-gateway-proxy-sincronico-para-requests-del-cliente.md) | El gateway resuelve las requests del cliente como proxy sincrónico | Aceptado | 2026-09-19 |
 | [ADR-0010](0010-revocacion-de-tokens-con-redis.md) | Revocación de tokens JWT con Redis | Propuesto | — |
 | [ADR-0011](0011-roles-y-permisos-en-community.md) | Roles y permisos en `community`, con un bitmask propagado por evento | Propuesto | — |
+| [ADR-0012](0012-permisos-por-canal.md) | Permisos por canal, como excepción sobre el modelo del ADR-0011 | Propuesto | — |
 
 ## De servicio (referencia)
 
