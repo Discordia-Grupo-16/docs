@@ -3,12 +3,10 @@ info:
   title: Discordia Chat Service API
   version: 1.0.0
   description: >
-    Servicio `chat-y-real-time`. Cubre, para el camino crítico del Sprint 1
-    (CP1): Enviar mensaje en un canal (#15). Historial y reconexión (#16) se
-    modela parcialmente vía GET /channels/{channelId}/messages (carga de
-    historial) — la paginación completa y la garantía de no pérdida de
-    mensajes en reconexión (CA2 de esa historia) se profundizan en CP2, ya
-    que esa historia no está en el Objetivo Principal del Sprint 1.
+    Servicio `chat-y-real-time`. Cubre el camino crítico del Sprint 1
+    (CP1): Enviar mensaje en un canal (#15); y del Sprint 2 (CP2): Historial
+    y reconexión sin pérdida de mensajes (SCRUM-46) — paginación con cursor
+    (`before`/`after`) y garantía de no pérdida al reconectar.
     Adaptado del contrato de referencia entregado por la cátedra: IDs pasan
     de integer a UUID para ser consistentes con `identity` y `community`, y
     channelId/authorId ahora referencian directamente los recursos de esos
@@ -23,9 +21,10 @@ paths:
     get:
       summary: Retrieve the message history of a channel
       description: >
-        Returns the channel's messages ordered by createdAt ascending, then
-        id ascending. CA1 (carga de historial) de "Historial y reconexión":
-        los más recientes primero, con paginación mediante `before`.
+        Returns the channel's messages in ascending order (oldest first).
+        Without params: returns the last 50 messages (initial load, CA1).
+        ?before: scroll-up pagination. ?after: reconnection resync (CA2) —
+        returns 404 if the anchor does not exist in this channel.
       operationId: getChannelMessages
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -45,12 +44,20 @@ paths:
             format: uuid
           description: Id de mensaje para paginar hacia atrás (mensajes anteriores a este).
         - in: query
+          name: after
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Id de mensaje para resync al reconectar (mensajes posteriores a este). Devuelve 404 si el anchor no existe en el canal.
+        - in: query
           name: limit
           required: false
           schema:
             type: integer
-            default: 50
+            minimum: 1
             maximum: 100
+            default: 50
       responses:
         '200':
           description: A list of messages
@@ -58,20 +65,37 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [data]
+                required: [data, hasMore]
                 properties:
                   data:
                     type: array
                     items:
                       $ref: '#/components/schemas/Message'
+                  hasMore:
+                    type: boolean
+                    description: >
+                      true cuando hay más mensajes disponibles más allá de la página devuelta.
+                      Para ?after, true indica que el cliente debe seguir paginando para ponerse al día.
+        '400':
+          description: Parámetros de query inválidos (UUID malformado, limit no positivo).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: X-User-Id ausente o no es un UUID válido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: El usuario no tiene acceso a este canal (autorización validada contra roles/permisos en `community`).
+          description: El usuario no es miembro activo del servidor dueño del canal.
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: Channel not found
+          description: Canal inexistente, o el anchor de ?after no existe en este canal.
           content:
             application/problem+json:
               schema:
@@ -155,12 +179,15 @@ components:
   schemas:
     Message:
       type: object
-      required: [id, channelId, authorId, content, createdAt, editedAt]
+      required: [messageId, channelId, serverId, authorId, content, createdAt, clientMessageId]
       properties:
-        id:
+        messageId:
           type: string
           format: uuid
         channelId:
+          type: string
+          format: uuid
+        serverId:
           type: string
           format: uuid
         authorId:
@@ -174,10 +201,10 @@ components:
         createdAt:
           type: string
           format: date-time
-        editedAt:
+        clientMessageId:
           type: string
-          format: date-time
-          nullable: true
+          format: uuid
+          description: ID generado por el cliente al enviar. Permite deduplicar mensajes recibidos por WebSocket y por HTTP al reconectar.
 
     SendOrEditMessageEvent:
       type: object
