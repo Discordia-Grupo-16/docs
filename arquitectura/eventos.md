@@ -121,11 +121,13 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 {
   "serverId": "0f4e...",
   "members": [
-    { "userId": "a1b2...", "permissions": 73 },
+    { "userId": "a1b2...", "permissions": 73, "channelOverrides": { "9f1c...": 1 } },
     { "userId": "c3d4...", "permissions": 511 }
   ]
 }
 ```
+
+`channelOverrides` es opcional y lo agrega el [ADR-0012](../adr/0012-permisos-por-canal.md): lleva el permiso efectivo **en los canales donde difiere** del de servidor. Un miembro sin excepciones no lo trae, y entonces el evento es idéntico al que define el ADR-0011.
 
 Reglas de publicación:
 
@@ -136,6 +138,14 @@ Reglas de publicación:
 - **Cola compartida**, como los demás eventos de `community`: escribe en el Mongo de `chat`, que es uno solo.
 - **Si el servidor es muy grande**, el productor puede partir el cambio en varios eventos con un subconjunto de `members` cada uno. No cambia el contrato: el consumidor ya aplica entrada por entrada.
 - El bitmask **no viaja en el JWT**: cambia sin que el token cambie.
+
+Y las que agrega `channelOverrides` (ADR-0012):
+
+- **Solo los canales que difieren.** El consumidor resuelve `permisos(canal) = channelOverrides[canal] ?? permissions`, así que un canal ausente no significa "sin permiso" sino "lo mismo que en el servidor".
+- **También llega resuelto.** No viajan los `allow`/`deny` crudos: mandarlos obligaría a `chat` a conocer los roles del miembro y rehacer el cálculo, que es lo que el ADR-0011 evita.
+- **Se publica además** al crear, editar o borrar una excepción de canal, y al borrar un canal que tenía una.
+- **Compatible hacia atrás:** un consumidor que ignore el campo sigue funcionando con permisos por servidor. Es lo que permite implementarlo por capas.
+- **Lo que esto habilita en `chat`:** el broadcast deja de poder mandar cada mensaje a todas las conexiones del servidor. Un mensaje de un canal que el usuario no puede ver no tiene que salir hacia él, así que el hub pasa a filtrar por canal (ver las consecuencias del ADR-0012).
 
 ⁵ Suspensión de cuentas. `userId` es la cuenta suspendida o reactivada; `suspendedBy` y `reactivatedBy`, el `userId` del staff que hizo la acción (queda para la auditoría). El momento es el `occurredAt` del envelope: no se repite en `data`.
 
