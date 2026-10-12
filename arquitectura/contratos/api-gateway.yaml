@@ -13,7 +13,8 @@ info:
     Correspondencia de ruteo para el camino crítico del Sprint 1:
     - /api/v1/users*, /api/v1/sessions* → identity
     - /api/v1/servers*, /api/v1/invites* → community
-    - /api/v1/channels/{channelId}/messages, /api/v1/channels/{channelId}/ws → chat-y-real-time
+    - /api/v1/channels/{channelId}/messages, /api/v1/channels/{channelId}/ws,
+      /api/v1/channels/{channelId}/voice-tokens → chat-y-real-time
 
     El gateway valida el JWT recibido en `Authorization: Bearer <token>` y,
     antes de reenviar la request al servicio correspondiente, la enriquece
@@ -455,6 +456,42 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /api/v1/channels/{channelId}/voice-tokens:
+    post:
+      summary: '[proxy → chat-y-real-time] Emitir un token para unirse a un canal de voz'
+      operationId: gatewayCreateVoiceToken
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+      responses:
+        '200':
+          description: Ver chat.yaml → POST /channels/{channelId}/voice-tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'chat.yaml#/components/schemas/VoiceToken'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: Ver chat.yaml → la voz no está configurada en este entorno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   securitySchemes:
