@@ -1,8 +1,8 @@
 # ADR-0005: Tecnología del canal de voz
 
-- **Estado:** Propuesto
-- **Fecha:** —
-- **Decisores:** _(a completar — épica de Milton)_
+- **Estado:** Aceptado
+- **Fecha:** 2026-10-11
+- **Decisores:** Milton (dueño de la épica del canal de voz)
 - **Servicios afectados:** `chat-and-real-time`, `web-app`, `mobile`
 
 ## Contexto
@@ -28,21 +28,38 @@ El equipo no tiene experiencia previa declarada en tiempo real, y esta épica co
 - A favor: nada que operar más allá de la señalización, que ya la puede hacer `chat-and-real-time`.
 - En contra: no escala más allá de 3–4 participantes (cada cliente sube N-1 streams); problemas de NAT sin TURN; en la práctica no sirve para un canal de voz tipo Discord.
 
-## Criterio sugerido para decidir
-
-La pregunta que ordena todo: **¿la cátedra evalúa el canal de voz por funcionar o por estar implementado a bajo nivel?** Si es lo primero, la Opción A libera semanas. Si es lo segundo, la Opción B con LiveKit OSS es el punto medio razonable.
-
-**Conviene confirmarlo con la cátedra antes de decidir.**
-
 ## Decisión
 
-_(a completar)_
+Elegimos **Opción A — LiveKit Cloud**.
+
+Porque la cátedra deja la tecnología a elección del grupo y evalúa que el canal de voz funcione, no que esté implementado a bajo nivel. Con eso resuelto, un servicio gestionado libera semanas en la épica con más riesgo técnico del TP. Entre los gestionados elegimos LiveKit porque tiene SDK de cliente para web y React Native, incluye TURN, no nos obliga a abrir puertos UDP en nuestra nube ([ADR-0006](0006-proveedor-cloud-y-cicd.md)) y su plan Build es gratuito.
+
+LiveKit Cloud además deja una salida barata: LiveKit OSS (Opción B) usa los mismos SDK de cliente y la misma API de salas, así que pasar a un SFU propio es un cambio de configuración de `chat-and-real-time`. En el entorno local usamos LiveKit OSS en modo dev, un contenedor que levanta el compose, para que nadie necesite cuenta ni claves de Cloud y las pruebas no gasten el free tier. Como la API es la misma, la app no cambia entre local y nube.
+
+La Opción C se descarta: no escala más allá de 3 o 4 participantes por canal.
 
 ## Consecuencias
 
-_(a completar)_
+**Positivas**
+
+- El audio va directo del cliente a LiveKit y no pasa por nuestros servicios. `chat-and-real-time` solo autoriza la unión y firma el token de acceso a la sala.
+- La revocación de tokens de LiveKit permite cortar la llamada de quien pierde el acceso al canal.
+- Los clientes web y mobile usan el mismo SDK.
+
+**Negativas / costo que aceptamos**
+
+- Dependencia de un tercero y de su free tier (5000 minutos por mes, 100 conexiones simultáneas).
+- Hace falta una cuenta y credenciales, gestionadas según [ADR-0007](0007-gestion-de-secretos.md).
+- Mobile necesita un development build: el SDK de LiveKit no corre en Expo Go.
+- `chat-and-real-time` sube a Go 1.26.9, la versión que pide el SDK de servidor.
+
+**Qué queda pendiente por esta decisión**
+
+- Decidir [ADR-0007](0007-gestion-de-secretos.md) para guardar las claves de LiveKit en la nube.
+- Documentar el paso a LiveKit OSS si se agota el free tier o lo pide la cátedra.
 
 ## Referencias
 
-- [ADR-0006](0006-proveedor-cloud-y-cicd.md) — dónde correría el SFU si se elige la Opción B
-- [ADR-0007](0007-gestion-de-secretos.md) — API keys si se elige la Opción A
+- [ADR-0006](0006-proveedor-cloud-y-cicd.md) — dónde correría el SFU si se pasa a LiveKit OSS
+- [ADR-0007](0007-gestion-de-secretos.md) — credenciales de LiveKit Cloud
+- SCRUM-51 — Unirse a un canal de voz
