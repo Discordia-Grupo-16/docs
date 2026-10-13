@@ -63,6 +63,8 @@ Esto refleja la arquitectura real ([ADR-0002](../adr/0002-api-gateway-y-publicac
 - No podés pegarle a `identity-service` directo con Postman/curl para descartar si un bug es del gateway o del servicio.
 - No podés abrir un cliente de base de datos local contra `identity-db`, `community-db` o `chat-mongo` para mirar el estado de los datos a mitad de la demo.
 
+**La excepción es `livekit`**, el servidor de voz que viene del compose de `chat` ([ADR-0005](../adr/0005-tecnologia-del-canal-de-voz.md)). El audio va directo del cliente a LiveKit, sin pasar por el gateway, así que publica siempre sus puertos: `7880/tcp` (señalización), `7881/tcp` y `7882/udp` (audio). Si alguno está ocupado o bloqueado por el firewall, la voz no conecta.
+
 **Para debuggear con los puertos abiertos**, usá [`docker-compose.demo.yaml`](./docker-compose.demo.yaml) en vez del override por defecto — ver la sección [Variante para pruebas y debugging](#variante-para-pruebas-y-debugging) más abajo. No modifiques `docker-compose.override.yaml` para esto: ese archivo es el que representa la arquitectura real (todo pasa por el gateway) y se aplica siempre por default con `docker compose up`.
 
 ## Variante para pruebas y debugging
@@ -103,8 +105,18 @@ Esta variante **no se usa para la demo frente al corrector** — ahí corre solo
 | `identity-redis` | — | No |
 | `community-db` | — | No |
 | `chat-mongo` | — | No |
+| `livekit` | — (LiveKit OSS en modo dev) | Sí (`7880`, `7881`, `7882/udp`) |
 
 > Los nombres de la primera columna son los definitivos para el nombre de host dentro de Docker: cada servicio se llama `<dominio>-service` en su propio compose (`identity-service`, `chat-service`, `community-service`), independientemente del nombre canónico de `servicios.md`. Es una decisión tomada, no una inconsistencia a resolver — el gateway y este override dependen de que se mantenga ese sufijo `-service` en todo servicio nuevo que se agregue.
+
+## Probar el canal de voz
+
+Con todo levantado, `chat-service` (y `chat-service-2` en la variante multichat) firma tokens para el `livekit` local, con las claves públicas del modo dev (`devkey`/`secret`). Para probar:
+
+1. En la web, unite a un canal de voz desde dos navegadores o dos pestañas con usuarios distintos: los dos tienen que verse en la lista de la llamada y escucharse.
+2. Sin la web, pedí el token a mano contra el gateway: `curl -i -X POST -H "Authorization: Bearer <token>" localhost:8080/api/v1/channels/<canal de voz>/voice-tokens` responde `200` con `url` = `ws://localhost:7880`.
+
+Desde un teléfono, `localhost` no sirve: ver "Probar la voz desde un teléfono" en el README de `chat-and-real-time`.
 
 ## Qué falta agregar
 
