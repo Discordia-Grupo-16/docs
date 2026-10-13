@@ -550,7 +550,7 @@ paths:
         en un PR qué habilita `permissions = 73`. El bitmask es un detalle de
         cómo se guardan, y la respuesta trae las dos formas.
 
-        Publica `community.member.permissions_changed` con los permisos ya
+        Publica `community.member.permissions-changed` con los permisos ya
         resueltos de cada miembro afectado (ver `arquitectura/eventos.md`).
       operationId: updateRolePermissions
       parameters:
@@ -603,7 +603,7 @@ paths:
         responde igual. Repetir una asignación no es un error del cliente, así
         que puede reintentar después de una respuesta perdida sin pensarlo.
 
-        Publica `community.member.permissions_changed`.
+        Publica `community.member.permissions-changed`.
       operationId: assignRoleToMember
       parameters:
         - $ref: '#/components/parameters/XUserId'
