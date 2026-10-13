@@ -14,7 +14,7 @@ info:
     - /api/v1/users*, /api/v1/sessions* → identity
     - /api/v1/servers*, /api/v1/invites* → community
     - /api/v1/channels/{channelId}/messages, /api/v1/channels/{channelId}/ws → chat-y-real-time
-
+    - /api/v1/admin/users* → identity (backoffice, solo staff)
     El gateway valida el JWT recibido en `Authorization: Bearer <token>` y,
     antes de reenviar la request al servicio correspondiente, la enriquece
     con dos headers internos derivados de su payload (ver JwtClaims en
