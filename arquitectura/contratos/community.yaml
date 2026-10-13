@@ -457,8 +457,15 @@ components:
 
   schemas:
     Server:
+      description: >
+        Los nombres de los campos son los que el servicio devuelve hoy
+        (`snake_case`), no los que declaraba este contrato (`camelCase`): un
+        cliente generado desde la versión anterior pedía `ownerId` y recibía
+        `undefined`. El resto de los schemas de este archivo sigue en
+        `camelCase` y queda como deuda de INF-01.
       type: object
-      required: [id, name, iconUrl, ownerId, createdAt]
+      required:
+        [id, name, description, owner_id, avatar_url, created_at, channels]
       properties:
         id:
           type: string
@@ -467,16 +474,30 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-        iconUrl:
+        description:
+          type: string
+          nullable: true
+        owner_id:
+          type: string
+          format: uuid
+        avatar_url:
+          description: >
+            Se llama `avatar_url` y no `iconUrl`: no es solo la convención de
+            nombres, es otro nombre de campo.
           type: string
           format: uri
           nullable: true
-        ownerId:
-          type: string
-          format: uuid
-        createdAt:
+        created_at:
           type: string
           format: date-time
+        channels:
+          description: >
+            Los canales del servidor, incluidos en la respuesta y no pedidos
+            aparte. Llega vacío para quien no tiene `VIEW_CHANNEL`, que es
+            cómo este servicio esconde los canales (ADR-0011).
+          type: array
+          items:
+            $ref: '#/components/schemas/Channel'
 
     CreateServerRequest:
       type: object
