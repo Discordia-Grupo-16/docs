@@ -8,7 +8,7 @@ Contratos HTTP entre los tres artefactos cliente, el gateway y los servicios bac
 |---|---|---|
 | [`api-gateway.yaml`](api-gateway.yaml) | `api-gateway` | Punto único de entrada. Reexpone (con `$ref` cross-file) los endpoints de los tres servicios de abajo bajo `/api/v1/*`. |
 | [`identity.yaml`](identity.yaml) | `identity` | Registro (#1), Login (#2), Edición y visualización de perfil propio (#4, #5). |
-| [`community.yaml`](community.yaml) | `community` | Crear servidor (#6), Generar invitación (#7), Unirse vía invitación (#8), Abandonar servidor (#9), Crear/Editar/Eliminar canal (#11, #12, #13). Del CP2: Editar permisos de un rol (SCRUM-61) y Asignar rol a un miembro (SCRUM-62), con el listado de miembros. |
+| [`community.yaml`](community.yaml) | `community` | Crear servidor (#6), Generar invitación (#7), Unirse vía invitación (#8), Abandonar servidor (#9), Crear/Editar/Eliminar canal (#11, #12, #13). Del CP2: Editar permisos de un rol (SCRUM-61), Asignar rol a un miembro (SCRUM-62) y Definir rol por defecto (SCRUM-63), con el listado de miembros. |
 | [`chat.yaml`](chat.yaml) | `chat-y-real-time` | Enviar mensaje en un canal (#15) — historial y WebSocket. |
 
 Los números de historia son los de la tabla de [Historias obligatorias de la Consigna](../../Consigna). El alcance exacto de cada archivo (qué CA cubre y qué queda fuera de este sprint) está documentado en el `info.description` de cada uno.

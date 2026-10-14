@@ -29,8 +29,10 @@ paths:
       description: >
         CA1 (éxito), CA2 (nombre inválido) y CA3 (ícono inválido) de "Crear
         servidor". Al crearse se genera automáticamente un canal de texto y
-        uno de voz por defecto, y el creador queda como owner con rol por
-        defecto de administración. El ícono es opcional: si se omite, el
+        uno de voz por defecto, y un rol `everyone` marcado como rol por
+        defecto (SCRUM-63) con `VIEW_CHANNEL` y `SEND_MESSAGES`, que también
+        recibe el creador. El creador queda como owner, y el owner tiene todos
+        los permisos sin depender de ningún rol (ADR-0011). El ícono es opcional: si se omite, el
         servidor queda sin ícono y CA1 se cumple igual (la consigna dice
         "nombre del servidor (y opcionalmente un ícono)").
       operationId: createServer
@@ -593,6 +595,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/DetailError'
 
+  /servers/{serverId}/roles/{roleId}/default:
+    put:
+      summary: Elegir el rol que reciben los nuevos miembros
+      description: >
+        CA1 de "Definir rol por defecto" (SCRUM-63). Marca este rol como el que
+        se asigna automáticamente al aceptar una invitación.
+
+        Es exclusivo: marcarlo desmarca el anterior en la misma transacción, así
+        que un servidor nunca tiene dos roles por defecto. No hay forma de
+        desmarcar sin elegir otro, que es cómo se cumple el CA2 —"hasta que se
+        configure otro rol por defecto en su lugar"— mientras no exista el
+        endpoint de eliminar un rol.
+
+        Pide la jerarquía además de `MANAGE_ROLES`: marcar como defecto un rol
+        por encima del propio sería dárselo a todo el que entre.
+
+        No publica ningún evento: cambiar el defecto no altera los permisos de
+        nadie que ya sea miembro, solo los de quien entre después.
+
+        Idempotente: marcar el que ya es defecto responde igual.
+      operationId: setDefaultRole
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+      responses:
+        '204':
+          description: El rol es el nuevo defecto del servidor.
+        '403':
+          description: >
+            Quien pide no tiene `MANAGE_ROLES`, o el rol está en su misma
+            posición o por encima.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+        '404':
+          description: Servidor o rol inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+
   /servers/{serverId}/roles/{roleId}/members/{userId}:
     put:
       summary: Darle un rol a un miembro
@@ -977,8 +1022,11 @@ components:
           maxLength: 100
         is_default:
           description: >
-            El rol que recibe todo el que entra al servidor. Hay uno solo por
-            servidor.
+            El rol que recibe todo el que entra al servidor (SCRUM-63). Hay uno
+            solo por servidor, y se cambia con
+            `PUT /servers/{serverId}/roles/{roleId}/default`. Se puede editar
+            como cualquier otro rol: editarlo cambia lo que reciben los que
+            entren después.
           type: boolean
         permissions:
           description: >

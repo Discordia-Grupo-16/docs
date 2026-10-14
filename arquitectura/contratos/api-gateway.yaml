@@ -572,6 +572,28 @@ paths:
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
 
+  /api/v1/servers/{serverId}/roles/{roleId}/default:
+    put:
+      summary: '[proxy → community] Elegir el rol por defecto del servidor'
+      description: >
+        Marca el rol que reciben los nuevos miembros (SCRUM-63). Exclusivo e
+        idempotente.
+      operationId: gatewaySetDefaultRole
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+      responses:
+        '204':
+          description: Ver community.yaml → PUT .../roles/{roleId}/default
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/servers/{serverId}/roles/{roleId}/members/{userId}:
     put:
       summary: '[proxy → community] Darle un rol a un miembro'
