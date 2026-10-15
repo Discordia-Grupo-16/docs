@@ -58,6 +58,45 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+    get:
+      summary: Listar los servidores del usuario
+      description: >
+        Devuelve los servidores de los que es miembro quien llama. Con
+        `withUser` devuelve solo los que además comparte con ese usuario: es
+        el dato de "servidores en común" del perfil público (SCRUM-26, CA1).
+        Si el usuario no existe o no hay servidores en común, la respuesta es
+        una lista vacía y no un `404`, para no revelar si la cuenta existe.
+      operationId: listServers
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+        - in: query
+          name: withUser
+          required: false
+          description: Id del usuario con el que se comparten los servidores.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Servidores del usuario, filtrados por los que comparte con `withUser` si se pasó.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Server'
+        '422':
+          description: "`withUser` con formato de UUID inválido."
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /servers/{serverId}:
     get:
       summary: Ver un servidor (requiere ser miembro)
