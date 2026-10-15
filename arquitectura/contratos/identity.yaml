@@ -267,6 +267,18 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Servicio de almacenamiento (Cloudinary) no disponible.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          description: Tiempo de espera agotado al subir el avatar.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /users/{userId}:
     get:
