@@ -23,7 +23,7 @@ Acá vive todo lo que **no pertenece a un solo microservicio**: decisiones de ar
 ## Estructura
 
 ```
-discordia-docs/
+docs/
 ├── adr/                    Architecture Decision Records transversales
 │   ├── README.md           Índice de TODOS los ADR (globales + de servicio)
 │   └── 0000-template.md    Plantilla

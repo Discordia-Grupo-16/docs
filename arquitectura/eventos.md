@@ -70,8 +70,6 @@ El bus da entrega **at-least-once**: todo consumidor puede recibir el mismo even
 
 ## Topología de colas (RabbitMQ)
 
-> [ADR-0003](../adr/0003-tecnologia-del-bus-pubsub.md) todavía figura como "Propuesto". Esta sección da por tomada la decisión de RabbitMQ porque bloquea a `chat` desde ya; si la weekly la cambia, se actualiza junto con el ADR.
-
 Un único exchange **topic**, durable: `discordia.events`. La routing key es el `eventType` completo (`community.member.joined`). Cada consumidor elige su patrón de binding (`community.#`, `chat.message.*`, `#` para fan-out total como hace `metrics`).
 
 Sobre ese exchange hay dos formas de declarar una cola, y **no son intercambiables**:
