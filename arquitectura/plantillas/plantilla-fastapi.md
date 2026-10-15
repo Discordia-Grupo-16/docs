@@ -1,6 +1,6 @@
 # Estructura de Microservicios FastAPI — Arquitectura por Dominios
 
-Este documento describe la arquitectura y estructura estándar para los microservicios basados en **FastAPI** del backend de Discordia (`identity`, `community`, `mod`, `monetization`), utilizando una organización modular por **dominios** y tomando `identity` como arquetipo base.
+Este documento describe la arquitectura y estructura estándar para los microservicios basados en **FastAPI** del backend de Discordia (`identity`, `community`, `monetization`), utilizando una organización modular por **dominios** y tomando `identity` como arquetipo base.
 
 ## Principios de Diseño
 

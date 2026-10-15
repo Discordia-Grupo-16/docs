@@ -16,7 +16,7 @@ Los números de historia son los de la tabla de [Historias obligatorias de la Co
 ## Convenciones usadas en los cuatro archivos
 
 - **IDs:** UUID v4 en todos los servicios (`arquitectura/servicios.md`), no integer.
-- **Envelope de respuesta:** `{ "data": ... }` en toda respuesta exitosa con body.
+- **Envelope de respuesta:** `{ "data": ... }` en toda respuesta exitosa con body. Los listados paginados suman `meta` al lado de `data` (ver [Listados paginados](../../procesos/convenciones.md#listados-paginados)).
 - **Errores:** `application/problem+json` con el schema `ErrorResponse` (`type`, `title`, `status`, `detail`, `instance`), igual en los cuatro archivos.
 - **Identidad entre servicios:** el gateway valida el JWT del cliente (`Authorization: Bearer`) y propaga `X-User-Id` / `X-User-Role` como headers internos a `identity`, `community` y `chat-y-real-time`. Estos servicios no vuelven a validar la firma del JWT en la mayoría de sus endpoints — la excepción es `identity` en los endpoints que manipulan la sesión en sí (`logout`, `refresh`), que sí reciben el JWT completo. Ver `JwtClaims` en `identity.yaml`.
 - **Multipart vs. JSON:** los endpoints que suben un archivo (crear servidor con ícono, avatar de perfil) usan `multipart/form-data`; el resto, `application/json`.

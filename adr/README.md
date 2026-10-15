@@ -8,7 +8,7 @@ Si agregás un ADR, agregá el renglón acá en el mismo PR.
 
 | ID | Título | Estado | Fecha |
 |---|---|---|---|
-| [ADR-0001](0001-stack-y-lenguajes-por-servicio.md) | Stack y lenguajes por microservicio | Aceptado | 2026-09-04 |
+| [ADR-0001](0001-stack-y-lenguajes-por-servicio.md) | Stack y lenguajes por microservicio | Reemplazado parcialmente por [ADR-0011](0011-roles-y-permisos-en-community.md) | 2026-09-04 |
 | [ADR-0002](0002-api-gateway-y-publicacion-al-bus.md) | API Gateway como punto único de entrada que publica al bus | Reemplazado parcialmente por [ADR-0009](0009-gateway-proxy-sincronico-para-requests-del-cliente.md) | 2026-09-04 |
 | [ADR-0003](0003-tecnologia-del-bus-pubsub.md) | Tecnología del bus Pub/Sub | Aceptado | 2026-09-24 |
 | [ADR-0004](0004-comunicaciones-sincronicas.md) | Comunicaciones sincrónicas permitidas | Rechazado | 2026-09-20 |
@@ -18,6 +18,7 @@ Si agregás un ADR, agregá el renglón acá en el mismo PR.
 | [ADR-0008](0008-proxy-websocket-como-excepcion-al-adr-0002.md) | Proxy WebSocket del gateway hacia `chat` como excepción al ADR-0002 | Propuesto | — |
 | [ADR-0009](0009-gateway-proxy-sincronico-para-requests-del-cliente.md) | El gateway resuelve las requests del cliente como proxy sincrónico | Aceptado | 2026-09-19 |
 | [ADR-0010](0010-revocacion-de-tokens-con-redis.md) | Revocación de tokens JWT con Redis | Propuesto | — |
+| [ADR-0011](0011-roles-y-permisos-en-community.md) | Roles y permisos en `community`, con un bitmask propagado por evento | Aceptado | 2026-10-05 |
 
 ## De servicio (referencia)
 
