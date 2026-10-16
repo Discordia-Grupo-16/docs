@@ -111,6 +111,10 @@ resource "aws_ecs_service" "gateway" {
     container_name   = "api-gateway"
     container_port   = 8080
   }
+
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
 }
 
 # Permiso para que las tareas ECS lean secretos de SSM

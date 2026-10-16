@@ -60,6 +60,10 @@ resource "aws_ecs_service" "identity" {
     # Lo atamos al DNS interno identity.discordia.local
     registry_arn = aws_service_discovery_service.internal_services["identity"].arn
   }
+
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
 }
 
 # ==========================================
@@ -121,6 +125,10 @@ resource "aws_ecs_service" "chat" {
   service_registries {
     registry_arn = aws_service_discovery_service.internal_services["chat"].arn
   }
+
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
 }
 
 resource "aws_cloudwatch_log_group" "community_logs" {
@@ -178,5 +186,9 @@ resource "aws_ecs_service" "community" {
 
   service_registries {
     registry_arn = aws_service_discovery_service.internal_services["community"].arn
+  }
+
+  lifecycle {
+    ignore_changes = [desired_count]
   }
 }
