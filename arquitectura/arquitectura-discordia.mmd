@@ -20,8 +20,7 @@ flowchart TB
 
     subgraph python["Python + FastAPI + PostgreSQL"]
         identity["identity<br/>usuarios / auth / perfil"]
-        community["community<br/>servidores / canales / invitaciones"]
-        mod["mod<br/>moderacion / roles / baneos"]
+        community["community<br/>servidores / canales / invitaciones<br/>roles / permisos / baneos"]
         monetization["monetization<br/>suscripciones / pagos"]
     end
 
@@ -43,7 +42,6 @@ flowchart TB
     gw -- "HTTP sincronico<br/>ADR-0009" --> community
     gw -- "HTTP sincronico<br/>ADR-0009" --> chat
     gw == "WebSocket<br/>ADR-0008" ==> chat
-    gw -. "sin contrato todavia" .-> mod
     gw -. "sin contrato todavia" .-> monetization
 
     gw -- "consulta jti<br/>ADR-0010" --> redis
@@ -51,7 +49,6 @@ flowchart TB
 
     identity <--> bus
     community <--> bus
-    mod <--> bus
     monetization <--> bus
     chat <--> bus
     bus --> notif

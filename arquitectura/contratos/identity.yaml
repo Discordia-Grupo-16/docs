@@ -85,6 +85,17 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: >
+            Credenciales correctas pero la cuenta está suspendida (CA1 de
+            "Suspender usuario a nivel plataforma"). Se distingue del 401
+            para que el cliente muestre "cuenta suspendida" en vez de
+            "credenciales inválidas". Solo se devuelve si la contraseña es
+            correcta, así no revela el estado de una cuenta ajena.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
     delete:
       summary: Cerrar sesión
@@ -134,7 +145,10 @@ paths:
                   data:
                     $ref: '#/components/schemas/AuthResult'
         '401':
-          description: Refresh token inválido, expirado o revocado (sesión expirada, redirige a login).
+          description: >
+            Refresh token inválido, expirado o revocado (sesión expirada,
+            redirige a login). Suspender una cuenta revoca todas sus
+            sesiones, así que el refresh de un usuario suspendido cae acá.
           content:
             application/problem+json:
               schema:
@@ -305,6 +319,80 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /admin/users:
+    get:
+      summary: Listar usuarios de la plataforma (backoffice)
+      description: >
+        SCRUM-85. Solo staff: responde 403 si `X-User-Role` no es `staff`
+        (el chequeo se evalúa antes que la validación de los query params).
+        CA1: `search` busca por email o nombre, con coincidencia parcial y sin
+        distinguir mayúsculas. CA2: `status` filtra por estado de la cuenta.
+        Paginado por offset, ordenado por `createdAt` desc y `id` desc.
+        Devuelve solo los campos necesarios para identificar la cuenta
+        (RNF — Minimización de datos en APIs). Incluye `email` aunque es un 
+        dato personal: CA1 busca por email y el endpoint es solo para staff, 
+        que lo necesita para identificar la cuenta.
+      operationId: listUsersForAdmin
+      parameters:
+        - $ref: '#/components/parameters/XUserRole'
+        - in: query
+          name: search
+          required: false
+          description: >
+            Texto a buscar en email o nombre. Vacío o solo espacios = sin filtro.
+          schema:
+            type: string
+            maxLength: 100
+        - in: query
+          name: status
+          required: false
+          description: Estado de la cuenta. Sin valor, trae todos.
+          schema:
+            type: string
+            enum: [active, suspended]
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Página de usuarios que cumplen los filtros.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminUser'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          description: El usuario autenticado no tiene rol de staff (CA Sin permisos).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Parámetros de búsqueda o paginación inválidos.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -361,9 +449,10 @@ components:
           description: >
             Rol global de plataforma (RNF — "Rol de staff de la plataforma"),
             independiente de los roles por servidor de la épica Roles y
-            Permisos. No es autoasignable: se otorga por fuera de la
-            interfaz normal (seed script, variable de entorno, etc.). Se
-            incluye en el JWT emitido (RNF — Lineamientos técnicos de
+            Permisos. No es autoasignable y ningún endpoint lo cambia: se
+            otorga con un comando de administración de `identity` que se
+            corre contra su base, y el seed de la demo lo usa para crear el
+            usuario staff (INF-14). Se incluye en el JWT emitido (RNF — Lineamientos técnicos de
             autenticación) para que el gateway y los servicios puedan
             autorizar endpoints de backoffice sin una llamada adicional.
         avatarUrl:
@@ -419,7 +508,7 @@ components:
         gateway y los demás servicios (`community`, `chat`) deben poder
         interpretar para autorizar requests, en particular para distinguir
         endpoints de backoffice reservados a `role: staff`.
-      required: [sub, role, iat, exp]
+      required: [sub, role, jti, iat, exp]
       properties:
         sub:
           type: string
@@ -428,7 +517,19 @@ components:
         role:
           type: string
           enum: [user, staff]
-          description: Copia de User.role al momento de emitir el token.
+          description: >
+            Copia de User.role al momento de emitir el token. Un solo valor,
+            no una lista. Los endpoints de backoffice exigen `staff` y
+            responden 403 con cualquier otro valor; el chequeo lo hace el
+            servicio dueño del endpoint con el header X-User-Role. Como es
+            una copia, un cambio de rol recién se ve en el próximo token.
+        jti:
+          type: string
+          format: uuid
+          description: >
+            Id único del token. Es la clave del denylist de Redis con la que
+            el gateway rechaza tokens revocados por logout o por suspensión
+            (ADR-0010).
         iat:
           type: integer
           description: Unix timestamp de emisión.
@@ -498,3 +599,41 @@ components:
           type: string
           description: JWT a verificar (con o sin prefijo 'Bearer ').
 
+    AdminUser:
+      type: object
+      description: >
+        Vista de staff de un usuario. No incluye datos de perfil ni credenciales.
+      required: [id, email, name, role, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+          enum: [user, staff]
+        status:
+          type: string
+          enum: [active, suspended]
+          description: >
+            Derivado de la fecha de suspensión de la cuenta: SCRUM-81 suspende,
+            SCRUM-82 reactiva.
+        createdAt:
+          type: string
+          format: date-time
+
+    PaginationMeta:
+      type: object
+      required: [total, limit, offset]
+      properties:
+        total:
+          type: integer
+          description: Cantidad de usuarios que cumplen los filtros, sin paginar.
+        limit:
+          type: integer
+        offset:
+          type: integer
