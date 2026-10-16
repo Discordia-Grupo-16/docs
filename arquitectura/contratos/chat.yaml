@@ -77,7 +77,7 @@ paths:
                       true cuando hay más mensajes disponibles más allá de la página devuelta.
                       Para ?after, true indica que el cliente debe seguir paginando para ponerse al día.
         '400':
-          description: Parámetros de query inválidos (UUID malformado, limit no positivo).
+          description: Parámetros inválidos (UUID malformado, limit no positivo, limit > 100, before y after simultáneos).
           content:
             application/problem+json:
               schema:
@@ -95,7 +95,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: Canal inexistente, o el anchor de ?after no existe en este canal.
+          description: Canal inexistente, o el anchor de ?after/?before no existe en este canal.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno del servidor.
           content:
             application/problem+json:
               schema:
