@@ -15,7 +15,7 @@ Todo lo de acá está verificado contra `community` (Python), `api-gateway` (Go)
 
 ## Servicios Python
 
-`identity` · `community` · `mod` · `monetization`
+`identity` · `community` · `monetization`
 
 | Archivo / carpeta | Obligatorio | Nota |
 | --- | --- | --- |
@@ -39,7 +39,7 @@ inventa:** si no coincide, todos los tests fallan con `database does not exist`.
 
 **Dos ORMs en uso:** `community` usa SQLAlchemy y `identity` SQLModel. No está
 documentado en ningún ADR y no hay una razón escrita. Vale unificar o justificarlo antes
-de que se sumen `mod` y `monetization`.
+de que se sume `monetization`.
 
 ## Servicios Go
 
