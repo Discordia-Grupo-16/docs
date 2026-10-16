@@ -16,7 +16,7 @@ Los números de historia son los de la tabla de [Historias obligatorias de la Co
 ## Convenciones usadas en los cuatro archivos
 
 - **IDs:** UUID v4 en todos los servicios (`arquitectura/servicios.md`), no integer.
-- **Envelope de respuesta:** `{ "data": ... }` en toda respuesta exitosa con body.
+- **Envelope de respuesta:** `{ "data": ... }` en toda respuesta exitosa con body. Los listados paginados suman `meta` al lado de `data` (ver [Listados paginados](../../procesos/convenciones.md#listados-paginados)).
 - **Errores:** `application/problem+json` con el schema `ErrorResponse` (`type`, `title`, `status`, `detail`, `instance`), igual en los cuatro archivos.
 - **Identidad entre servicios:** el gateway valida el JWT del cliente (`Authorization: Bearer`) y propaga `X-User-Id` / `X-User-Role` como headers internos a `identity`, `community` y `chat-y-real-time`. Estos servicios no vuelven a validar la firma del JWT en la mayoría de sus endpoints — la excepción es `identity` en los endpoints que manipulan la sesión en sí (`logout`, `refresh`), que sí reciben el JWT completo. Ver `JwtClaims` en `identity.yaml`.
 - **Multipart vs. JSON:** los endpoints que suben un archivo (crear servidor con ícono, avatar de perfil) usan `multipart/form-data`; el resto, `application/json`.
@@ -46,6 +46,7 @@ INF-01 porque atraviesa historias de varias personas.
 | `/servers/{serverId}/invites` | Implementado como `/servers/{serverId}/invitations` | Los dos archivos |
 | `/api/v1/channels/{channelId}/ws` | Un socket por usuario, no por canal: `/api/v1/ws` | `api-gateway.yaml` |
 | `Channel.categoryId` | No existe todavía; las categorías son SCRUM-39 | `Channel` |
+| La convención de [listados paginados](../../procesos/convenciones.md#listados-paginados) nombra "miembros de un servidor" como caso de offset con total | `GET /servers/{serverId}/members/` devuelve todo en un array sin paginar | `community.yaml` |
 
 El front está escrito contra la implementación y no contra estos archivos, que
 es por lo que funciona: un cliente generado desde la versión anterior de
@@ -53,6 +54,11 @@ es por lo que funciona: un cliente generado desde la versión anterior de
 
 `redocly lint` sobre `api-gateway.yaml` ya daba 4 errores de `security-defined`
 antes de este PR, así que no está corriendo en CI.
+
+La fila de la paginación apareció después: la convención se escribió mientras
+este PR estaba abierto, y nombra el listado de miembros entre sus casos. Para el
+alcance del CP2 un servidor tiene pocos miembros y traerlos todos alcanza;
+paginarlo es SCRUM-157, que ya existe en el backlog.
 
 ## Qué falta (fuera de alcance de este PR)
 

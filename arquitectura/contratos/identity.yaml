@@ -319,6 +319,80 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /admin/users:
+    get:
+      summary: Listar usuarios de la plataforma (backoffice)
+      description: >
+        SCRUM-85. Solo staff: responde 403 si `X-User-Role` no es `staff`
+        (el chequeo se evalúa antes que la validación de los query params).
+        CA1: `search` busca por email o nombre, con coincidencia parcial y sin
+        distinguir mayúsculas. CA2: `status` filtra por estado de la cuenta.
+        Paginado por offset, ordenado por `createdAt` desc y `id` desc.
+        Devuelve solo los campos necesarios para identificar la cuenta
+        (RNF — Minimización de datos en APIs). Incluye `email` aunque es un 
+        dato personal: CA1 busca por email y el endpoint es solo para staff, 
+        que lo necesita para identificar la cuenta.
+      operationId: listUsersForAdmin
+      parameters:
+        - $ref: '#/components/parameters/XUserRole'
+        - in: query
+          name: search
+          required: false
+          description: >
+            Texto a buscar en email o nombre. Vacío o solo espacios = sin filtro.
+          schema:
+            type: string
+            maxLength: 100
+        - in: query
+          name: status
+          required: false
+          description: Estado de la cuenta. Sin valor, trae todos.
+          schema:
+            type: string
+            enum: [active, suspended]
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Página de usuarios que cumplen los filtros.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminUser'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          description: El usuario autenticado no tiene rol de staff (CA Sin permisos).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Parámetros de búsqueda o paginación inválidos.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -525,3 +599,41 @@ components:
           type: string
           description: JWT a verificar (con o sin prefijo 'Bearer ').
 
+    AdminUser:
+      type: object
+      description: >
+        Vista de staff de un usuario. No incluye datos de perfil ni credenciales.
+      required: [id, email, name, role, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+          enum: [user, staff]
+        status:
+          type: string
+          enum: [active, suspended]
+          description: >
+            Derivado de la fecha de suspensión de la cuenta: SCRUM-81 suspende,
+            SCRUM-82 reactiva.
+        createdAt:
+          type: string
+          format: date-time
+
+    PaginationMeta:
+      type: object
+      required: [total, limit, offset]
+      properties:
+        total:
+          type: integer
+          description: Cantidad de usuarios que cumplen los filtros, sin paginar.
+        limit:
+          type: integer
+        offset:
+          type: integer
