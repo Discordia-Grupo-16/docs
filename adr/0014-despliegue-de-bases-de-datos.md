@@ -46,4 +46,4 @@ Porque la viabilidad económica en esta fase de desarrollo prevaleció por compl
 ## Referencias
 
 - Configuración en Terraform: `database.tf`
-- ADR-0001 (Priorización de reducción de costos)
+- [ADR-0013](0013-reduccion-de-costos-en-red.md)
