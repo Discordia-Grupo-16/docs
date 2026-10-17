@@ -29,6 +29,19 @@ Los números de historia son los de la tabla de [Historias obligatorias de la Co
 npx @redocly/cli bundle api-gateway.yaml -o api-gateway.bundled.yaml
 ```
 
+## Convención de nombres de campos: regla provisoria
+
+[`procesos/convenciones.md`](../../procesos/convenciones.md) dice `camelCase` en
+los JSON, y los servicios devuelven `snake_case`. Hasta que INF-01 decida cuál
+gana, **estos archivos describen lo que el servicio hace hoy**: un contrato que
+miente es peor que uno inconsistente, porque un cliente generado desde él no
+funciona.
+
+Por eso los schemas nuevos (`Role`, `ServerMember`) y el corregido (`Server`)
+están en `snake_case`, y los que quedan en `camelCase` figuran abajo como
+divergencia. Quien lea solo la convención va a creer que los nuevos están mal:
+están bien, y la convención es la que falta resolver.
+
 ## Divergencias conocidas entre estos archivos y el código
 
 Detectadas al documentar Roles y Permisos (SCRUM-61 y SCRUM-62). Se corrigió

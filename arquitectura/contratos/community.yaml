@@ -8,9 +8,9 @@ info:
     invitación (#8), Abandonar servidor (#9), Crear canal (#11), Editar
     canal (#12) y Eliminar canal (#13).
 
-    Del CP2 cubre Roles y Permisos: Editar permisos de un rol (SCRUM-61) y
-    Asignar rol a un miembro (SCRUM-62), con el listado de miembros que la
-    segunda necesita. El modelo está en el ADR-0011: un bitmask por servidor,
+    Del CP2 cubre Roles y Permisos: Editar permisos de un rol (SCRUM-61),
+    Asignar rol a un miembro (SCRUM-62) —con el listado de miembros que
+    necesita— y Definir rol por defecto para nuevos miembros (SCRUM-63). El modelo está en el ADR-0011: un bitmask por servidor,
     el permiso efectivo es el OR de los roles, y `community` es el único que
     lo resuelve.
 
@@ -475,7 +475,9 @@ paths:
     get:
       summary: Listar los roles del servidor
       description: >
-        Ordenados por `position` ascendente. Alcanza con ser miembro.
+        Ordenados por `position` ascendente. Alcanza con ser miembro: los
+        bitmasks dicen qué puede hacer cada rol, así que no son dato público
+        para cualquier autenticado que conozca un UUID de servidor.
       operationId: listRoles
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -489,8 +491,17 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Role'
+        '403':
+          description: Quien pregunta no es miembro del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
         '404':
-          description: Servidor inexistente.
+          description: >
+            Servidor inexistente. Va antes que el 403: no existir no es un dato
+            que haya que proteger, y chequear la membresía primero haría que un
+            servidor que nunca existió conteste "no sos miembro".
           content:
             application/json:
               schema:
@@ -537,6 +548,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DetailError'
+        '422':
+          description: Nombre vacío o de más de 100 caracteres.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
 
   /servers/{serverId}/roles/{roleId}:
     patch:
@@ -551,6 +568,10 @@ paths:
         Los permisos van por nombre y nunca por el entero: nadie puede revisar
         en un PR qué habilita `permissions = 73`. El bitmask es un detalle de
         cómo se guardan, y la respuesta trae las dos formas.
+
+        El orden de los chequeos define qué código llega: `MANAGE_ROLES` (403),
+        rol inexistente (404), jerarquía (403), permiso desconocido (422) y por
+        último el CA2 (409).
 
         Publica `community.member.permissions-changed` con los permisos ya
         resueltos de cada miembro afectado (ver `arquitectura/eventos.md`).
@@ -574,16 +595,44 @@ paths:
                 $ref: '#/components/schemas/Role'
         '403':
           description: >
-            Quien pide no tiene `MANAGE_ROLES`, o el rol está en su misma
-            posición o por encima en la jerarquía. Son dos motivos distintos
-            con dos mensajes distintos, porque se arreglan de formas
-            distintas.
+            Tres motivos distintos, cada uno con su mensaje, porque se
+            arreglan de formas distintas:
+
+            1. Quien pide no tiene `MANAGE_ROLES`.
+
+            2. El rol está en su misma posición o por encima en la jerarquía.
+            **Esto incluye editar su propio rol más alto**, que es el caso más
+            común de quien intenta quitarse la administración: la jerarquía
+            corta antes de llegar al 409. La interfaz tiene que mostrar el
+            mismo mensaje ante este 403 y ante el 409.
+
+            3. Está concediendo `ADMINISTRATOR` sin tenerlo efectivo. Es el
+            único bit con esa regla: los demás se pueden otorgar sin tenerlos,
+            porque un administrador de roles cuyo rol no incluye
+            `SEND_MESSAGES` tiene que poder dárselo a otros. `ADMINISTRATOR`
+            es distinto porque concede todo lo demás, `MANAGE_ROLES`
+            incluido. El owner no pasa por esta regla.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DetailError'
         '404':
           description: Servidor o rol inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+        '409':
+          description: >
+            CA2 de SCRUM-61, en su caso estricto: quien edita **un rol de
+            menor posición que es su única fuente de `ADMINISTRATOR`** (tiene
+            otro más alto que no lo concede). El servidor quedaría sin nadie
+            que pueda administrarlo.
+
+            No es el caso típico. Editar el propio rol más alto responde 403
+            por jerarquía, y si otro rol le sigue dando `ADMINISTRATOR` el
+            cambio responde 200, porque se mira el resultado efectivo y no
+            este rol solo.
           content:
             application/json:
               schema:

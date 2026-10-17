@@ -548,6 +548,14 @@ paths:
                   $ref: 'community.yaml#/components/schemas/Role'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: >
+            Quien pregunta no es miembro del servidor. Los bitmasks dicen qué
+            puede hacer cada rol, así que no son dato público.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -583,6 +591,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
 
   /api/v1/servers/{serverId}/roles/{roleId}:
     patch:
@@ -612,9 +622,27 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: >
+            Sin `MANAGE_ROLES`, el rol está en su misma posición o por encima
+            —lo que incluye editar su propio rol más alto—, o está concediendo
+            `ADMINISTRATOR` sin tenerlo. La interfaz muestra el mismo mensaje
+            ante este 403 y ante el 409. Ver community.yaml para los tres
+            motivos.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: >
+            CA2 de SCRUM-61 en su caso estricto: el rol que se edita es de
+            menor posición y es su única fuente de `ADMINISTRATOR`. El caso
+            típico —editar el propio rol más alto— responde 403.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
 
