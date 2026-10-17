@@ -173,6 +173,66 @@ paths:
               schema:
                 $ref: '#/components/schemas/DetailError'
 
+  /servers/{serverId}/members/{userId}:
+    delete:
+      summary: Expulsar a un miembro del servidor
+      description: >
+        CA1, CA2 y CA3 de "Expulsar miembro" (SCRUM-68).
+
+        La expulsión borra la membresía, y con ella las asignaciones de rol
+        del miembro, y nada más: no queda registrado en ningún lado. Por eso
+        puede volver con cualquier invitación válida, y eso es lo que la separa
+        del baneo (`PUT /servers/{serverId}/bans/{userId}`), que además lo
+        registra para que no pueda volver. Es el CA1.
+
+        `DELETE` porque borra un recurso, la membresía, igual que
+        `DELETE /servers/{serverId}/members/me` cuando el que se va es el
+        propio usuario. Por eso mismo no se puede expulsar a uno mismo: para
+        eso está ese endpoint.
+
+        Pide `KICK_MEMBERS` (bit 5 del ADR-0011) y respeta la jerarquía de la
+        regla 4 de ese ADR: hay que estar **estrictamente** por encima del
+        miembro, empatar no alcanza, y el owner no es blanco válido para nadie
+        —ni para un `ADMINISTRATOR`—. Eso es el CA2.
+
+        No es idempotente: expulsar a quien no es miembro responde `404`,
+        porque no queda ningún estado que afirmar. Tampoco recibe motivo, ya
+        que la expulsión no deja registro.
+
+        Publica `community.member.left` con `reason: kicked`, el mismo evento
+        que un abandono voluntario o un baneo: `chat` ya corta el acceso con
+        él, así que expulsar no necesita un evento nuevo ni un consumidor
+        nuevo.
+      operationId: kickServerMember
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: >
+            El usuario dejó de ser miembro del servidor (CA1). Puede volver con
+            una invitación nueva: no queda baneado.
+        '403':
+          description: >
+            Quien expulsa no tiene `KICK_MEMBERS` (CA3), o el blanco tiene una
+            jerarquía igual o superior a la suya, o es el owner, o es el mismo
+            que expulsa (CA2). El permiso se chequea antes de buscar al
+            miembro, así que alguien sin `KICK_MEMBERS` recibe `403` tanto si
+            el usuario es miembro como si no: el código de respuesta no sirve
+            para enumerar miembros.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+        '404':
+          description: >
+            Servidor inexistente, o el usuario no es miembro de ese servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+
   /servers/{serverId}/bans/{userId}:
     put:
       summary: Banear a un miembro del servidor
