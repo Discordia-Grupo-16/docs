@@ -268,6 +268,27 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/servers/{serverId}/bans/{userId}:
+    put:
+      summary: '[proxy → community] Banear a un miembro del servidor'
+      description: >
+        Pide `BAN_MEMBERS` y respeta la jerarquía (SCRUM-69). Idempotente.
+      operationId: gatewayBanServerMember
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: Ver community.yaml → PUT .../bans/{userId}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/servers/{serverId}/invites:
     post:
       summary: '[proxy → community] Generar invitación'
