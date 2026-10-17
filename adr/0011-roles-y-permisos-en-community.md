@@ -122,7 +122,7 @@ consecuencias: lo que se escribe en los dos lenguajes se desincroniza.
 
 ### Cómo viaja
 
-`community` publica **`community.member.permissions_changed`** cada vez que cambian los permisos de
+`community` publica **`community.member.permissions-changed`** cada vez que cambian los permisos de
 un rol, cambia la asignación de roles de un miembro, o entra un miembro nuevo. El evento lleva el
 servidor y la **lista de los miembros afectados con su bitmask ya calculado**:
 
