@@ -1384,6 +1384,9 @@ components:
         created_at:
           type: string
           format: date-time
+          description: >
+            Hoy sale sin zona horaria (sin `Z`), así que no cumple `date-time` ni
+            `procesos/convenciones.md`: es la deuda conocida de las fechas de `community`.
 
     DetailError:
       description: >
