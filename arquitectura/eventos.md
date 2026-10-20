@@ -17,6 +17,11 @@ Ejemplos: `identity.user.registered`, `community.server.created`, `mod.member.ba
 Reglas:
 
 - El verbo va **en pasado**: el evento describe algo que ya ocurrió, no una orden.
+- **Tres segmentos, minúsculas, y las palabras se separan con guión medio.** No es solo
+  estilo: la librería compartida `pubsub` valida el nombre con un regex, y un segmento
+  con guión bajo no es un patrón de binding válido. Un evento así se publica igual —
+  RabbitMQ acepta cualquier routing key— pero **ningún consumidor en Go puede bindear a
+  él**, así que sale al bus y no le llega a nadie.
 - El servicio que publica es el dueño del nombre. Nadie publica en el namespace de otro.
 - **El payload lo define el dueño del servicio que publica**, en la historia que implementa el evento, y en ese mismo PR lo deja escrito en la tabla de abajo. Un consumidor puede proponer los campos que necesita, pero la propuesta no es el contrato hasta que el dueño la confirma acá. Un payload que quedó en "a definir" es deuda del dueño de ese servicio, no de quien lo consume.
 - Un evento nuevo se agrega; **un evento existente no cambia de forma**. Si el payload tiene que cambiar de manera incompatible, se publica `v2` en paralelo y se deprecia el anterior.
@@ -103,7 +108,7 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 | `community.channel.deleted` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ channelId }` ¹ | SCRUM-137 |
 | `community.member.joined` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ serverId, userId }` ¹ | SCRUM-137 |
 | `community.member.left` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ serverId, userId, reason }` ¹ ³ | SCRUM-137, SCRUM-68, SCRUM-69 |
-| `community.member.permissions_changed` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61 |
+| `community.member.permissions-changed` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61 |
 | `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId }` | SCRUM-41 |
 | `chat.membership.changed` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ serverId, userId }` ² | SCRUM-146 |
 | `identity.user.suspended` | `identity` | `chat` (cierre de sockets, cola por instancia), `metrics` (fan-out) | `{ userId, suspendedBy }` ⁵ | SCRUM-81 |
