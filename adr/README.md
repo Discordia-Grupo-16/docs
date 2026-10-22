@@ -26,7 +26,7 @@ Viven en el repo de cada servicio, se listan acá solo si afectan a alguien de a
 
 | ID | Título | Servicio | Estado | Link |
 |---|---|---|---|---|
-| — | _(todavía ninguno)_ | | | |
+| ADR-0001 | Un rol nuevo nace abajo de la jerarquía | `community` | Aceptado | [repo de community](https://github.com/Discordia-Grupo-16/community/blob/develop/docs/adr/0001-posicion-de-los-roles-nuevos.md) |
 
 ## Estados
 
