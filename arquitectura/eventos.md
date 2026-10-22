@@ -17,6 +17,11 @@ Ejemplos: `identity.user.registered`, `community.server.created`, `mod.member.ba
 Reglas:
 
 - El verbo va **en pasado**: el evento describe algo que ya ocurrió, no una orden.
+- **Tres segmentos, minúsculas, y las palabras se separan con guión medio.** No es solo
+  estilo: la librería compartida `pubsub` valida el nombre con un regex, y un segmento
+  con guión bajo no es un patrón de binding válido. Un evento así se publica igual —
+  RabbitMQ acepta cualquier routing key— pero **ningún consumidor en Go puede bindear a
+  él**, así que sale al bus y no le llega a nadie.
 - El servicio que publica es el dueño del nombre. Nadie publica en el namespace de otro.
 - **El payload lo define el dueño del servicio que publica**, en la historia que implementa el evento, y en ese mismo PR lo deja escrito en la tabla de abajo. Un consumidor puede proponer los campos que necesita, pero la propuesta no es el contrato hasta que el dueño la confirma acá. Un payload que quedó en "a definir" es deuda del dueño de ese servicio, no de quien lo consume.
 - Un evento nuevo se agrega; **un evento existente no cambia de forma**. Si el payload tiene que cambiar de manera incompatible, se publica `v2` en paralelo y se deprecia el anterior.
@@ -86,7 +91,7 @@ Sobre ese exchange hay dos formas de declarar una cola, y **no son intercambiabl
 - **Cola compartida** para consumir los eventos de `community` que alimentan su proyección de autorización: el Mongo de `chat` es uno solo, no tiene sentido que tres instancias apliquen el mismo `member.joined` tres veces.
 - **Cola por instancia** para `chat.message.sent`: cada instancia tiene un conjunto distinto de clientes WebSocket conectados, así que cada una necesita enterarse de **todos** los mensajes para reenviárselos a los suyos.
 - **Cola por instancia** para `identity.user.suspended`: los sockets del usuario suspendido pueden estar en cualquier instancia, así que todas tienen que enterarse para cerrar los suyos.
-- **Cola compartida** `chat.voice-access` para cortar las llamadas de voz de quien pierde el acceso (SCRUM-51): se bindea a `community.member.left`, `community.channel.deleted`, `community.member.permissions_changed` e `identity.user.suspended`. Es compartida porque sacar a alguien de una sala de LiveKit es una sola llamada al proveedor, que tiene que hacer una sola instancia. Solo corta sesiones de voz registradas **antes** del `occurredAt` del evento, así un evento atrasado no corta una unión nueva y un duplicado no encuentra nada que cortar.
+- **Cola compartida** `chat.voice-access` para cortar las llamadas de voz de quien pierde el acceso (SCRUM-51): se bindea a `community.member.left`, `community.channel.deleted`, `community.member.permissions-changed` e `identity.user.suspended`. Es compartida porque sacar a alguien de una sala de LiveKit es una sola llamada al proveedor, que tiene que hacer una sola instancia. Solo corta sesiones de voz registradas **antes** del `occurredAt` del evento, así un evento atrasado no corta una unión nueva y un duplicado no encuentra nada que cortar.
 - **Cola por instancia** para `chat.membership.changed`, el relevo interno de membresías: la instancia que aplica un `member.joined` o `.left` a la proyección no sabe cuál tiene al usuario conectado, así que avisa a todas y cada una actualiza las suscripciones de sus propias conexiones.
 
 **Riesgo a tener presente:** si `chat.message.sent` se declara por error como cola compartida, el mensaje le llega a una sola instancia — es decir, a una fracción de los usuarios conectados. No tira error, solo un cliente que nunca recibe nada, y es muy difícil de diagnosticar sin saber que la topología estaba mal desde el arranque. Por eso queda escrito acá y no solo en la cabeza de quien lo implementa.
@@ -104,7 +109,7 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 | `community.channel.deleted` | `community` | `chat` (proyección de autorización), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ channelId }` ¹ | SCRUM-137 |
 | `community.member.joined` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ serverId, userId }` ¹ | SCRUM-137 |
 | `community.member.left` | `community` | `chat` (proyección de autorización), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, userId, reason }` ¹ ³ | SCRUM-137, SCRUM-68, SCRUM-69 |
-| `community.member.permissions_changed` | `community` | `chat` (proyección de autorización), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61 |
+| `community.member.permissions-changed` | `community` | `chat` (proyección de autorización), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61 |
 | `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId }` | SCRUM-41 |
 | `chat.membership.changed` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ serverId, userId }` ² | SCRUM-146 |
 | `identity.user.suspended` | `identity` | `chat` (cierre de sockets, cola por instancia), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ userId, suspendedBy }` ⁵ | SCRUM-81 |

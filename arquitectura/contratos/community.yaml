@@ -3,13 +3,20 @@ info:
   title: Discordia Community Service API
   version: 1.0.0
   description: >
-    Servicio `community`. Cubre, para el camino crítico del Sprint 1 (CP1):
+    Servicio `community`. Cubre, del camino crítico del Sprint 1 (CP1):
     Crear servidor (#6), Generar invitación (#7), Unirse a servidor vía
     invitación (#8), Abandonar servidor (#9), Crear canal (#11), Editar
-    canal (#12) y Eliminar canal (#13). Roles y Permisos, Moderación y el
-    resto de la épica Servidores (transferir propiedad, eliminar servidor,
-    administrar configuración) quedan fuera de este sprint como Objetivo
-    Ideal o para CP2, y se agregan sin romper este contrato.
+    canal (#12) y Eliminar canal (#13).
+
+    Del CP2 cubre Roles y Permisos: Editar permisos de un rol (SCRUM-61),
+    Asignar rol a un miembro (SCRUM-62) —con el listado de miembros que
+    necesita— y Definir rol por defecto para nuevos miembros (SCRUM-63). El modelo está en el ADR-0011: un bitmask por servidor,
+    el permiso efectivo es el OR de los roles, y `community` es el único que
+    lo resuelve.
+
+    Siguen fuera de alcance Moderación, el resto de la épica Servidores
+    (transferir propiedad, administrar configuración) y los permisos por canal
+    del ADR-0012, que se agregan sin romper este contrato.
 
 servers:
   - url: http://localhost:8002
@@ -22,8 +29,10 @@ paths:
       description: >
         CA1 (éxito), CA2 (nombre inválido) y CA3 (ícono inválido) de "Crear
         servidor". Al crearse se genera automáticamente un canal de texto y
-        uno de voz por defecto, y el creador queda como owner con rol por
-        defecto de administración. El ícono es opcional: si se omite, el
+        uno de voz por defecto, y un rol `everyone` marcado como rol por
+        defecto (SCRUM-63) con `VIEW_CHANNEL` y `SEND_MESSAGES`, que también
+        recibe el creador. El creador queda como owner, y el owner tiene todos
+        los permisos sin depender de ningún rol (ADR-0011). El ícono es opcional: si se omite, el
         servidor queda sin ícono y CA1 se cumple igual (la consigna dice
         "nombre del servidor (y opcionalmente un ícono)").
       operationId: createServer
@@ -112,6 +121,57 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /servers/{serverId}/members/:
+    get:
+      summary: Listar los miembros del servidor con los roles de cada uno
+      description: >
+        Es lo que hace posible asignar un rol desde una pantalla (SCRUM-62):
+        los endpoints de asignación se dirigen por `userId`, y sin este
+        listado el cliente conoce los roles del servidor pero no a quién
+        dárselos.
+
+        Alcanza con ser miembro; no se pide `MANAGE_ROLES`. Ver quién está en
+        el servidor no es gestionarlo, y es la misma condición que ya pide
+        `GET /servers/{serverId}`. Cambiar un rol sí choca con `MANAGE_ROLES`
+        y con la jerarquía, en los dos endpoints de asignación.
+
+        No devuelve nombre ni avatar: son de `identity`, y este servicio no
+        guarda copia de datos que no son suyos. El cliente los resuelve con
+        `GET /users?ids=` (ver identity.yaml). Tampoco devuelve el id de la
+        fila de membresía, porque ningún endpoint se dirige por él.
+
+        La barra final no es decorativa: el gateway enruta
+        `/api/v1/servers/{serverId}/members/` y no responde a la forma sin
+        barra.
+      operationId: listServerMembers
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: >
+            Los miembros ordenados por fecha de ingreso. Los roles de cada
+            uno vienen ordenados por `position` ascendente, así que el último
+            es el más alto de su jerarquía.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServerMember'
+        '403':
+          description: Quien pregunta no es miembro del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+        '404':
+          description: Servidor inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
 
   /servers/{serverId}/invites:
     post:
@@ -411,6 +471,296 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /servers/{serverId}/roles/:
+    get:
+      summary: Listar los roles del servidor
+      description: >
+        Ordenados por `position` ascendente. Alcanza con ser miembro: los
+        bitmasks dicen qué puede hacer cada rol, así que no son dato público
+        para cualquier autenticado que conozca un UUID de servidor.
+      operationId: listRoles
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Los roles del servidor.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+        '403':
+          description: Quien pregunta no es miembro del servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+        '404':
+          description: >
+            Servidor inexistente. Va antes que el 403: no existir no es un dato
+            que haya que proteger, y chequear la membresía primero haría que un
+            servidor que nunca existió conteste "no sos miembro".
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+
+    post:
+      summary: Crear un rol
+      description: >
+        El rol se crea sin ningún permiso y al final de la jerarquía, para que
+        crearlo nunca sea una forma indirecta de conceder algo. Los permisos
+        se le dan después con el `PATCH`.
+      operationId: createRole
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+      responses:
+        '201':
+          description: Rol creado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '403':
+          description: Quien pide no tiene `MANAGE_ROLES`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+        '404':
+          description: Servidor inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+        '422':
+          description: Nombre vacío o de más de 100 caracteres.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+
+  /servers/{serverId}/roles/{roleId}:
+    patch:
+      summary: Reemplazar los permisos de un rol
+      description: >
+        CA1, CA2 y CA3 de "Editar permisos de un rol" (SCRUM-61).
+
+        **Reemplaza**, no suma: lo que no venga en la lista queda revocado. Un
+        cliente que mande solo el permiso nuevo revoca el resto sin querer.
+        Mandar una lista vacía es válido y deja el rol sin ningún permiso.
+
+        Los permisos van por nombre y nunca por el entero: nadie puede revisar
+        en un PR qué habilita `permissions = 73`. El bitmask es un detalle de
+        cómo se guardan, y la respuesta trae las dos formas.
+
+        El orden de los chequeos define qué código llega: `MANAGE_ROLES` (403),
+        rol inexistente (404), jerarquía (403), permiso desconocido (422) y por
+        último el CA2 (409).
+
+        Publica `community.member.permissions-changed` con los permisos ya
+        resueltos de cada miembro afectado (ver `arquitectura/eventos.md`).
+      operationId: updateRolePermissions
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRolePermissionsRequest'
+      responses:
+        '200':
+          description: El rol con sus permisos nuevos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '403':
+          description: >
+            Tres motivos distintos, cada uno con su mensaje, porque se
+            arreglan de formas distintas:
+
+            1. Quien pide no tiene `MANAGE_ROLES`.
+
+            2. El rol está en su misma posición o por encima en la jerarquía.
+            **Esto incluye editar su propio rol más alto**, que es el caso más
+            común de quien intenta quitarse la administración: la jerarquía
+            corta antes de llegar al 409. La interfaz tiene que mostrar el
+            mismo mensaje ante este 403 y ante el 409.
+
+            3. Está concediendo `ADMINISTRATOR` sin tenerlo efectivo. Es el
+            único bit con esa regla: los demás se pueden otorgar sin tenerlos,
+            porque un administrador de roles cuyo rol no incluye
+            `SEND_MESSAGES` tiene que poder dárselo a otros. `ADMINISTRATOR`
+            es distinto porque concede todo lo demás, `MANAGE_ROLES`
+            incluido. El owner no pasa por esta regla.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+        '404':
+          description: Servidor o rol inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+        '409':
+          description: >
+            CA2 de SCRUM-61, en su caso estricto: quien edita **un rol de
+            menor posición que es su única fuente de `ADMINISTRATOR`** (tiene
+            otro más alto que no lo concede). El servidor quedaría sin nadie
+            que pueda administrarlo.
+
+            No es el caso típico. Editar el propio rol más alto responde 403
+            por jerarquía, y si otro rol le sigue dando `ADMINISTRATOR` el
+            cambio responde 200, porque se mira el resultado efectivo y no
+            este rol solo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+        '422':
+          description: La lista trae un nombre de permiso que no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+
+  /servers/{serverId}/roles/{roleId}/default:
+    put:
+      summary: Elegir el rol que reciben los nuevos miembros
+      description: >
+        CA1 de "Definir rol por defecto" (SCRUM-63). Marca este rol como el que
+        se asigna automáticamente al aceptar una invitación.
+
+        Es exclusivo: marcarlo desmarca el anterior en la misma transacción, así
+        que un servidor nunca tiene dos roles por defecto. No hay forma de
+        desmarcar sin elegir otro, que es cómo se cumple el CA2 —"hasta que se
+        configure otro rol por defecto en su lugar"— mientras no exista el
+        endpoint de eliminar un rol.
+
+        Pide la jerarquía además de `MANAGE_ROLES`: marcar como defecto un rol
+        por encima del propio sería dárselo a todo el que entre.
+
+        No publica ningún evento: cambiar el defecto no altera los permisos de
+        nadie que ya sea miembro, solo los de quien entre después.
+
+        Idempotente: marcar el que ya es defecto responde igual.
+      operationId: setDefaultRole
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+      responses:
+        '204':
+          description: El rol es el nuevo defecto del servidor.
+        '403':
+          description: >
+            Quien pide no tiene `MANAGE_ROLES`, o el rol está en su misma
+            posición o por encima.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+        '404':
+          description: Servidor o rol inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+
+  /servers/{serverId}/roles/{roleId}/members/{userId}:
+    put:
+      summary: Darle un rol a un miembro
+      description: >
+        CA1 de "Asignar rol a un miembro" (SCRUM-62).
+
+        Idempotente: asignar dos veces el mismo rol deja el mismo estado y
+        responde igual. Repetir una asignación no es un error del cliente, así
+        que puede reintentar después de una respuesta perdida sin pensarlo.
+
+        Publica `community.member.permissions-changed`.
+      operationId: assignRoleToMember
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: El miembro tiene el rol.
+        '403':
+          description: >
+            Quien pide no tiene `MANAGE_ROLES`, el rol está en su misma
+            posición o por encima, o el miembro tiene jerarquía igual o
+            superior a la suya. El owner nunca puede ser blanco: nadie está
+            por encima suyo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+        '404':
+          description: >
+            Servidor o rol inexistente, o el usuario no es miembro de este
+            servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+
+    delete:
+      summary: Quitarle un rol a un miembro
+      description: >
+        CA2 de "Asignar rol a un miembro" (SCRUM-62).
+
+        Lo que le den sus otros roles se conserva: el permiso efectivo es el
+        OR de todos, así que quitar uno no toca lo que aporta el resto. Por
+        eso el evento lleva el bitmask recalculado y no una resta.
+
+        Idempotente igual que la asignación: quitar un rol que el miembro no
+        tiene no falla.
+      operationId: removeRoleFromMember
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: El miembro no tiene el rol.
+        '403':
+          description: Los mismos tres motivos que en el `PUT`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+        '404':
+          description: >
+            Servidor o rol inexistente, o el usuario no es miembro de este
+            servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+
 components:
   parameters:
     XUserId:
@@ -447,6 +797,23 @@ components:
       schema:
         type: string
         format: uuid
+    RoleId:
+      in: path
+      name: roleId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UserId:
+      in: path
+      name: userId
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: >
+        El id del usuario en `identity`, no el de la fila de membresía: este
+        servicio no expone ese id porque ningún endpoint se dirige por él.
     InviteCode:
       in: path
       name: code
@@ -457,8 +824,16 @@ components:
 
   schemas:
     Server:
+      description: >
+        Los nombres de los campos son los que el servicio devuelve hoy
+        (`snake_case`), no los que declaraba este contrato (`camelCase`): un
+        cliente generado desde la versión anterior pedía `ownerId` y recibía
+        `undefined`. El resto de los schemas de este archivo sigue en
+        `camelCase` y queda como deuda de INF-01.
       type: object
-      required: [id, name, iconUrl, ownerId, createdAt]
+      required:
+        [id, name, description, owner_id, avatar_url, created_at, channels,
+         my_permissions, my_permission_names]
       properties:
         id:
           type: string
@@ -467,16 +842,45 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-        iconUrl:
+        description:
+          type: string
+          nullable: true
+        owner_id:
+          type: string
+          format: uuid
+        avatar_url:
+          description: >
+            Se llama `avatar_url` y no `iconUrl`: no es solo la convención de
+            nombres, es otro nombre de campo.
           type: string
           format: uri
           nullable: true
-        ownerId:
-          type: string
-          format: uuid
-        createdAt:
+        created_at:
           type: string
           format: date-time
+        channels:
+          description: >
+            Los canales del servidor, incluidos en la respuesta y no pedidos
+            aparte. Llega vacío para quien no tiene `VIEW_CHANNEL`, que es
+            cómo este servicio esconde los canales (ADR-0011).
+          type: array
+          items:
+            $ref: '#/components/schemas/Channel'
+        my_permissions:
+          description: >
+            Los permisos de quien pidió el servidor, ya resueltos: el OR de
+            sus roles, con el owner y `ADMINISTRATOR` expandidos (ADR-0011).
+
+            Existe para que el cliente no tenga que deducir nada comparando
+            `owner_id` con su propio id, ni replicar la regla de los roles. El
+            cliente chequea bits; la decisión se toma acá.
+          type: integer
+          minimum: 0
+        my_permission_names:
+          description: El mismo valor legible, para no obligar a nadie a hacer la cuenta.
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
 
     CreateServerRequest:
       type: object
@@ -627,6 +1031,141 @@ components:
           type: integer
           nullable: true
           description: Null o ausente para invitación sin límite de usos.
+
+    Permission:
+      description: >
+        Nombre de un permiso de servidor (ADR-0011). Es el vocabulario
+        compartido entre `community`, `chat`, la web y el mobile: el entero
+        que se guarda es un detalle de `community` y no viaja como contrato.
+
+        Los permisos son **por servidor** en el CP2: quien tiene
+        `VIEW_CHANNEL` ve todos los canales o ninguno. Las excepciones por
+        canal son el ADR-0012 y no están en este contrato.
+      type: string
+      enum:
+        - VIEW_CHANNEL
+        - SEND_MESSAGES
+        - CONNECT
+        - MANAGE_CHANNELS
+        - MANAGE_ROLES
+        - KICK_MEMBERS
+        - BAN_MEMBERS
+        - MANAGE_SERVER
+        - ADMINISTRATOR
+
+    Role:
+      type: object
+      required:
+        [id, server_id, name, is_default, permissions, permission_names,
+         position, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        server_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        is_default:
+          description: >
+            El rol que recibe todo el que entra al servidor (SCRUM-63). Hay uno
+            solo por servidor, y se cambia con
+            `PUT /servers/{serverId}/roles/{roleId}/default`. Se puede editar
+            como cualquier otro rol: editarlo cambia lo que reciben los que
+            entren después.
+          type: boolean
+        permissions:
+          description: >
+            Bitmask de los permisos del rol. Es cómo se guardan;
+            `permission_names` es la misma información, y es la que hay que
+            leer. Viaja porque chequear un bit es más barato que buscar en una
+            lista, no porque el cliente tenga que entender la tabla.
+          type: integer
+          minimum: 0
+        permission_names:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+        position:
+          description: >
+            Posición en la jerarquía: más alto es más arriba. Nadie puede
+            gestionar un rol en su misma posición o por encima, ni actuar
+            sobre un miembro cuyo rol más alto esté a su misma altura o
+            arriba. Es la regla que impide que un moderador se promueva.
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    UpdateRolePermissionsRequest:
+      description: >
+        Reemplaza por completo los permisos del rol. Una lista vacía es válida
+        y lo deja sin ningún permiso.
+      type: object
+      required: [permissions]
+      properties:
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+
+    ServerMember:
+      description: >
+        Un miembro del servidor. Sin nombre ni avatar, que son de `identity`,
+        y sin el id de la fila de membresía, que no le sirve a ningún cliente.
+      type: object
+      required: [user_id, joined_at, roles]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        joined_at:
+          type: string
+          format: date-time
+        roles:
+          description: >
+            Ordenados por `position` ascendente: el último es el más alto de
+            su jerarquía.
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+
+    DetailError:
+      description: >
+        La forma de error que `community` devuelve hoy, que **no** es el
+        `ErrorResponse` (RFC 7807) que declaran las convenciones de esta
+        carpeta. El API Gateway la traduce a `application/problem+json` antes
+        de que llegue al cliente, así que `api-gateway.yaml` sí documenta
+        problem+json para estos mismos endpoints.
+
+        Se documenta tal como es para que este contrato no describa un
+        comportamiento que no existe. Normalizar los errores del servicio es
+        deuda de INF-01, no de las historias de permisos.
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          oneOf:
+            - description: El mensaje de una `HTTPException`.
+              type: string
+            - description: >
+                Los errores de validación de FastAPI (422), que llegan como
+                lista y no como texto.
+              type: array
+              items:
+                type: object
+                properties:
+                  loc:
+                    type: array
+                    items:
+                      type: string
+                  msg:
+                    type: string
+                  type:
+                    type: string
 
     ErrorResponse:
       type: object

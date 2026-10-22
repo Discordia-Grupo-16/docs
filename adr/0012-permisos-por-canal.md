@@ -115,7 +115,7 @@ restricción general.
 
 ### Cómo viaja
 
-El evento **`community.member.permissions_changed` no cambia de nombre ni de forma general**: suma
+El evento **`community.member.permissions-changed` no cambia de nombre ni de forma general**: suma
 un campo opcional con los canales donde el resultado difiere del permiso de servidor.
 
 ```json

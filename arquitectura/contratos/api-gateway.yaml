@@ -16,7 +16,6 @@ info:
     - /api/v1/channels/{channelId}/messages, /api/v1/channels/{channelId}/ws,
       /api/v1/channels/{channelId}/voice-tokens → chat-y-real-time
     - /api/v1/admin/users* → identity (backoffice, solo staff)
-
     El gateway valida el JWT recibido en `Authorization: Bearer <token>` y,
     antes de reenviar la request al servicio correspondiente, la enriquece
     con dos headers internos derivados de su payload (ver JwtClaims en
@@ -242,6 +241,33 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/servers/{serverId}/members/:
+    get:
+      summary: '[proxy → community] Listar miembros con sus roles'
+      description: >
+        La barra final es parte de la ruta: la tabla de rutas del gateway la
+        declara así y no responde a la forma sin barra.
+      operationId: gatewayListServerMembers
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Ver community.yaml → GET /servers/{serverId}/members/
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: 'community.yaml#/components/schemas/ServerMember'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/v1/servers/{serverId}/invites:
     post:
@@ -504,6 +530,187 @@ paths:
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
 
+  /api/v1/servers/{serverId}/roles/:
+    get:
+      summary: '[proxy → community] Listar roles'
+      operationId: gatewayListRoles
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Ver community.yaml → GET /servers/{serverId}/roles/
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: 'community.yaml#/components/schemas/Role'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: >
+            Quien pregunta no es miembro del servidor. Los bitmasks dicen qué
+            puede hacer cada rol, así que no son dato público.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      summary: '[proxy → community] Crear rol'
+      operationId: gatewayCreateRole
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+      responses:
+        '201':
+          description: Ver community.yaml → POST /servers/{serverId}/roles/
+          content:
+            application/json:
+              schema:
+                $ref: 'community.yaml#/components/schemas/Role'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/v1/servers/{serverId}/roles/{roleId}:
+    patch:
+      summary: '[proxy → community] Editar los permisos de un rol'
+      description: >
+        Reemplaza los permisos del rol: lo que no venga en la lista queda
+        revocado (SCRUM-61).
+      operationId: gatewayUpdateRolePermissions
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'community.yaml#/components/schemas/UpdateRolePermissionsRequest'
+      responses:
+        '200':
+          description: Ver community.yaml → PATCH /servers/{serverId}/roles/{roleId}
+          content:
+            application/json:
+              schema:
+                $ref: 'community.yaml#/components/schemas/Role'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: >
+            Sin `MANAGE_ROLES`, el rol está en su misma posición o por encima
+            —lo que incluye editar su propio rol más alto—, o está concediendo
+            `ADMINISTRATOR` sin tenerlo. La interfaz muestra el mismo mensaje
+            ante este 403 y ante el 409. Ver community.yaml para los tres
+            motivos.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >
+            CA2 de SCRUM-61 en su caso estricto: el rol que se edita es de
+            menor posición y es su única fuente de `ADMINISTRATOR`. El caso
+            típico —editar el propio rol más alto— responde 403.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/v1/servers/{serverId}/roles/{roleId}/default:
+    put:
+      summary: '[proxy → community] Elegir el rol por defecto del servidor'
+      description: >
+        Marca el rol que reciben los nuevos miembros (SCRUM-63). Exclusivo e
+        idempotente.
+      operationId: gatewaySetDefaultRole
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+      responses:
+        '204':
+          description: Ver community.yaml → PUT .../roles/{roleId}/default
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/servers/{serverId}/roles/{roleId}/members/{userId}:
+    put:
+      summary: '[proxy → community] Darle un rol a un miembro'
+      description: >
+        Idempotente: repetirlo responde 204 igual (SCRUM-62).
+      operationId: gatewayAssignRoleToMember
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: Ver community.yaml → PUT .../roles/{roleId}/members/{userId}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: '[proxy → community] Quitarle un rol a un miembro'
+      description: Idempotente igual que el `PUT` (SCRUM-62).
+      operationId: gatewayRemoveRoleFromMember
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: Ver community.yaml → DELETE .../roles/{roleId}/members/{userId}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/channels/{channelId}/voice-tokens:
     post:
       summary: '[proxy → chat-y-real-time] Emitir un token para unirse a un canal de voz'
@@ -558,6 +765,20 @@ components:
     ChannelId:
       in: path
       name: channelId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RoleId:
+      in: path
+      name: roleId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UserId:
+      in: path
+      name: userId
       required: true
       schema:
         type: string
