@@ -246,6 +246,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DetailError'
+        '422':
+          description: >
+            Motivo de más de 500 caracteres. Se mide **después** de recortar los
+            espacios, así que un motivo válido rodeado de espacios no se rechaza.
+
+            Es el único de los códigos de este endpoint que se evalúa **antes**
+            que el resto: es validación de entrada pura, no depende del estado
+            del servidor, así que no filtra nada y falla rápido. Un motivo
+            inválido contra un servidor inexistente responde `422`, no `404`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
 
   /servers/{serverId}/invites:
     post:
