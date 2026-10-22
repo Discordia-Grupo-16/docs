@@ -91,6 +91,17 @@ paths:
         ese canal (RNF — Autorización para unirse a un canal). La
         propagación entre instancias del servicio se hace vía Pub/Sub (RNF
         — Mensajería en tiempo real).
+
+
+        Códigos de cierre propios (rango privado 4000-4999 de RFC 6455).
+        Regla general: los códigos 4400-4499 son terminales y el cliente
+        (`@discordia/realtime`) NO reconecta ante ellos; con cualquier otro
+        código sigue reconectando con backoff, como hasta ahora.
+
+        - `4403` (reason `account_suspended`): la cuenta fue suspendida por
+          el staff (`identity.user.suspended`). El cliente no reconecta,
+          descarta los tokens y lleva al login con el aviso de cuenta
+          suspendida.
       operationId: channelWebSocket
       parameters:
         - $ref: '#/components/parameters/XUserId'

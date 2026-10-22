@@ -1,0 +1,78 @@
+%% Discordia - arquitectura de microservicios (estado al CP1, 25/09/2026)
+%% Relleno = implementado · punteado gris = planificado · flecha gruesa = WebSocket
+%% Entre servicios no hay HTTP (ADR-0004): sólo eventos por el bus. Una base por servicio.
+
+flowchart TB
+    subgraph clientes["Clientes · monorepo web-app · cliente WS @discordia/realtime"]
+        web["web-app<br/>React"]
+        mob["mobile<br/>React Native"]
+        bo["backoffice<br/>React"]
+    end
+
+    gw["api-gateway · Go<br/>JWT · rate limit · CORS · circuit breaker<br/>proxy HTTP sincrónico (ADR-0009) · proxy WebSocket (ADR-0008)"]
+    redis[("Redis<br/>sesiones · denylist de tokens")]
+
+    subgraph python["Python + FastAPI"]
+        identity["identity<br/>usuarios · login · perfil<br/><i>sin eventos publicados hoy</i>"]
+        community["community<br/>servidores · canales<br/>invitaciones · membresías"]
+        mod["mod<br/>roles · baneos"]
+        monet["monetization<br/>pagos"]
+    end
+
+    subgraph golang["Go"]
+        chat["chat-and-real-time<br/>N instancias, sin sticky sessions<br/>hub WebSocket · proyección local"]
+    end
+
+    subgraph planificados["Consumidores planificados (Go)"]
+        notif["notifications<br/>Firebase Cloud Messaging"]
+        metrics["metrics<br/>binding #"]
+    end
+
+    idb[("identity-db<br/>PostgreSQL")]
+    cdb[("community-db<br/>PostgreSQL")]
+    mdb[("chat-mongo · MongoDB<br/>messages · channels · memberships")]
+
+    bus{{"RabbitMQ · exchange discordia.events (topic, durable)<br/>sólo eventos · at-least-once · ack manual · retries + DLQ<br/>cliente compartido: lib pubsub (Go / Python)"}}
+
+    web -- "HTTPS / WSS" --> gw
+    mob -- "HTTPS / WSS" --> gw
+    bo -.-> gw
+
+    gw -- "HTTP<br/>/users /sessions" --> identity
+    gw -- "HTTP<br/>/servers /invites /channels" --> community
+    gw == "WebSocket /ws<br/>X-User-Id · X-Correlation-Id" ==> chat
+    gw -- "revocación de tokens" --> redis
+    identity --> redis
+
+    identity --> idb
+    community --> cdb
+    chat --> mdb
+
+    community -- "publica community.channel.*<br/>community.member.* (tras el commit)" --> bus
+    chat <-- "publica chat.message.sent · chat.membership.changed<br/>consume community.* · chat.*" --> bus
+    gw -. "gateway.auth.* (auditoría)" .-> bus
+    bus -.-> notif
+    bus -.-> metrics
+
+    %% enlaces invisibles: sólo ordenan el layout (bases arriba del bus)
+    idb ~~~ bus
+    cdb ~~~ bus
+    mdb ~~~ bus
+
+    classDef cliente fill:#e9ecef,stroke:#495057
+    classDef gateway fill:#d0bfff,stroke:#5f3dc4
+    classDef py fill:#b2f2bb,stroke:#2b8a3e
+    classDef go fill:#a5d8ff,stroke:#1971c2
+    classDef db fill:#ffd8a8,stroke:#e8590c
+    classDef cache fill:#ffc9c9,stroke:#c92a2a
+    classDef broker fill:#ffec99,stroke:#e67700
+    classDef pendiente fill:#ffffff,stroke:#868e96,stroke-dasharray:5 5,color:#868e96
+
+    class web,mob cliente
+    class gw gateway
+    class identity,community py
+    class chat go
+    class idb,cdb,mdb db
+    class redis cache
+    class bus broker
+    class bo,mod,monet,notif,metrics pendiente
