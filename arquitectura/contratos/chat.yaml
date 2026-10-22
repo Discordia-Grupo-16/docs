@@ -133,8 +133,9 @@ paths:
       summary: Emitir un token para unirse a un canal de voz
       description: >
         SCRUM-51. Valida contra la proyección local que el canal exista, que
-        el usuario sea miembro activo del servidor y que el canal sea de voz,
-        en ese orden (404, 403, 422). Si pasa, firma un token de LiveKit de
+        el usuario sea miembro activo del servidor con `VIEW_CHANNEL` y
+        `CONNECT` en el servidor, y que el canal sea de voz, en ese orden
+        (404, 403, 422). Si pasa, firma un token de LiveKit de
         vida corta que solo permite publicar el micrófono en la sala del
         canal (ADR-0005). Sin body. Si el usuario tenía otra sala firmada,
         `chat` lo saca de ella con el motivo `other_device`
@@ -161,7 +162,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: El usuario no es miembro activo del servidor del canal.
+          description: >
+            El usuario no es miembro activo del servidor del canal, o le falta
+            `VIEW_CHANNEL` o `CONNECT` en el servidor.
           content:
             application/problem+json:
               schema:
