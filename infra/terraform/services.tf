@@ -28,7 +28,8 @@ resource "aws_ecs_task_definition" "identity" {
     secrets = [
       { name = "DATABASE_PASSWORD", valueFrom = aws_ssm_parameter.db_password.arn },
       { name = "REDIS_PASSWORD", valueFrom = aws_ssm_parameter.db_password.arn },
-      { name = "JWT_SECRET_KEY", valueFrom = aws_ssm_parameter.jwt_secret.arn }
+      { name = "JWT_SECRET_KEY", valueFrom = aws_ssm_parameter.jwt_secret.arn },
+      { name = "RABBITMQ_URL", valueFrom = aws_ssm_parameter.rabbitmq_url.arn }
     ]
 
     logConfiguration = {
