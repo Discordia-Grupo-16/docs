@@ -30,6 +30,6 @@ Referencia rápida de qué hace cada componente. El detalle de por qué el stack
 | ------------------------------------ | -------------------- | ------------------------------------------------------ |
 | Firebase Cloud Messaging             | `notifications`      | —                                                      |
 | RabbitMQ (bus Pub/Sub)               | todos menos `api-gateway` | [ADR-0003](../adr/0003-tecnologia-del-bus-pubsub.md)   |
-| Infraestructura de voz (sin definir) | `chat-and-real-time` | [ADR-0005](../adr/0005-tecnologia-del-canal-de-voz.md) |
+| LiveKit Cloud                        | `chat-and-real-time` | [ADR-0005](../adr/0005-tecnologia-del-canal-de-voz.md) |
 | Redis                                | `identity`, `api-gateway` | [ADR-0010](../adr/0010-revocacion-de-tokens-con-redis.md) |
 | Pasarela de pagos (sin definir)      | `monetization`       | —                                                      |

@@ -124,6 +124,7 @@ La consigna pide justificar cada comunicación sincrónica. Las 19 operaciones H
 | `PATCH /api/v1/servers/{serverId}/channels/{channelId}` | sí — `200` con el canal | `community.channel.updated` | `chat`, `metrics` |
 | `DELETE /api/v1/servers/{serverId}/channels/{channelId}` | sí — `204` | `community.channel.deleted` | `chat`, `metrics` |
 | `GET /api/v1/channels/{channelId}/messages` | sí — lectura del historial | — | |
+| `POST /api/v1/channels/{channelId}/voice-tokens` | sí — `200` con el token; `403`, `404` y `422` se deciden contra la proyección de `chat` | — | |
 | `GET /api/v1/channels/{channelId}/ws` | no aplica — transporte de larga duración, [ADR-0008](0008-proxy-websocket-como-excepcion-al-adr-0002.md) | `chat.message.sent` | `chat` (fan-out), `metrics` |
 
 ¹ No hay evento catalogado hoy en [`arquitectura/eventos.md`](../arquitectura/eventos.md). Si una historia futura necesita enterarse, se agrega a esa tabla en el mismo PR que lo implementa; no se publica nada que no esté catalogado.
