@@ -19,3 +19,8 @@ entregas/**/*.pdf
 .env
 *.pem
 *.key
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform.lock.*
