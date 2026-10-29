@@ -467,6 +467,58 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Reactivar una cuenta suspendida (backoffice)
+      description: >
+        SCRUM-82. Solo staff. Vuelve la cuenta a activa y publica
+        `identity.user.reactivated` (D4, `eventos.md`). El usuario vuelve a
+        entrar con un login nuevo: sus sesiones viejas siguen revocadas. Usa el
+        `X-Correlation-Id` del gateway como `correlationId` del evento.
+      operationId: reactivateUser
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Cuenta reactivada. Devuelve el usuario con su estado nuevo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AdminUser'
+        '403':
+          description: El usuario autenticado no tiene rol de staff (CA2).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No existe un usuario con ese id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: La cuenta no está suspendida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: "`userId` no es un UUID."
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   securitySchemes:
