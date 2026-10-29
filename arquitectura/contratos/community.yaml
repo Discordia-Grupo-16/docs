@@ -354,6 +354,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DetailError'
+        '422':
+          description: >
+            Motivo de más de 500 caracteres. Se mide **después** de recortar los
+            espacios, así que un motivo válido rodeado de espacios no se rechaza.
+
+            Es el único de los códigos de este endpoint que se evalúa **antes**
+            que el resto: es validación de entrada pura, no depende del estado
+            del servidor, así que no filtra nada y falla rápido. Un motivo
+            inválido contra un servidor inexistente responde `422`, no `404`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+                
     delete:
       summary: Revocar el baneo de un usuario
       description: >
@@ -742,9 +756,17 @@ paths:
     post:
       summary: Crear un rol
       description: >
-        El rol se crea sin ningún permiso y al final de la jerarquía, para que
-        crearlo nunca sea una forma indirecta de conceder algo. Los permisos
-        se le dan después con el `PATCH`.
+        El rol se crea **sin ningún permiso** y en el **punto más bajo de la
+        jerarquía**, justo encima del rol por defecto, empujando un lugar para
+        arriba a todos los demás. Sin permisos para que crearlo nunca sea una
+        forma indirecta de conceder algo —se los da después el `PATCH`, que sí
+        chequea jerarquía—, y abajo para que tampoco sea una forma indirecta de
+        quedar por encima de los roles que ya existían.
+
+        Dos consecuencias para el cliente: el `position` de los otros roles del
+        servidor **cambia** con esta llamada, así que una lista ya cargada queda
+        vieja y hay que releerla; y el orden entre dos roles es el inverso al de
+        creación. Ver el ADR-0001 de `community`.
       operationId: createRole
       parameters:
         - $ref: '#/components/parameters/XUserId'

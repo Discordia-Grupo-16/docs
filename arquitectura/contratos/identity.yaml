@@ -281,6 +281,18 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Servicio de almacenamiento (Cloudinary) no disponible.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          description: Tiempo de espera agotado al subir el avatar.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /users/{userId}:
     get:
@@ -388,6 +400,121 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Parámetros de búsqueda o paginación inválidos.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/users/{userId}/suspension:
+    post:
+      summary: Suspender una cuenta (backoffice)
+      description: >
+        SCRUM-81. Solo staff. Marca la cuenta como suspendida, revoca todas sus
+        sesiones (refresh tokens, y los `jti` de los access tokens van al
+        denylist, ADR-0010) y publica `identity.user.suspended` (D4,
+        `eventos.md`). Desde ese momento el login responde 403 y el perfil
+        público, 404. No se puede suspender a una cuenta staff, tampoco la
+        propia. Usa el `X-Correlation-Id` del gateway como `correlationId` del
+        evento.
+      operationId: suspendUser
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Cuenta suspendida. Devuelve el usuario con su estado nuevo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AdminUser'
+        '403':
+          description: >
+            Dos casos, en este orden de chequeo. (1) El usuario autenticado no
+            tiene rol de staff (CA3): `title` "Acceso denegado". (2) La cuenta
+            a suspender es de staff, incluida la propia: `title` "Acción no
+            permitida". El `type` es `about:blank` en ambos, así que el cliente
+            los distingue por `title`/`detail`. El chequeo de rol va antes que
+            el 404, y el de objetivo staff después.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No existe un usuario con ese id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: La cuenta ya está suspendida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: "`userId` no es un UUID."
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Reactivar una cuenta suspendida (backoffice)
+      description: >
+        SCRUM-82. Solo staff. Vuelve la cuenta a activa y publica
+        `identity.user.reactivated` (D4, `eventos.md`). El usuario vuelve a
+        entrar con un login nuevo: sus sesiones viejas siguen revocadas. Usa el
+        `X-Correlation-Id` del gateway como `correlationId` del evento.
+      operationId: reactivateUser
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Cuenta reactivada. Devuelve el usuario con su estado nuevo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AdminUser'
+        '403':
+          description: El usuario autenticado no tiene rol de staff (CA2).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No existe un usuario con ese id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: La cuenta no está suspendida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: "`userId` no es un UUID."
           content:
             application/problem+json:
               schema:
