@@ -40,8 +40,8 @@ repo: el alcance acordado no los incluye (los roles y baneos viven en `community
 
 - **Sin commits directos a `develop` ni a `main`.** Hoy se cumple por proceso, no por
   configuración (ver [Branch protection](#branch-protection)).
-- `develop` → `main` solo en los checkpoints, con un tag `x.y.z` (sin `v`, anotado): `0.1.0`
-  para el CP1 y `0.2.0` para el CP2. Un fix posterior sube la última cifra. `discordia-ci`
+- `develop` → `main` solo en los checkpoints, con un tag `vX.Y.>`: `0.1.0`
+  para el CP1 se mantiene y `v0.2.0` para el CP2. Un fix posterior sube la última cifra. `discordia-ci`
   conserva `v1`, que es lo que referencian los workflows de los otros repos.
 - Las ramas de trabajo salen siempre de `develop` y se borran después del merge.
 
