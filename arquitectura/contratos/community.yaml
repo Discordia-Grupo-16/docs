@@ -233,6 +233,55 @@ paths:
               schema:
                 $ref: '#/components/schemas/DetailError'
 
+  /servers/{serverId}/bans/:
+    get:
+      summary: Listar los baneos del servidor
+      description: >
+        El listado de baneados de "Revocar baneo" (SCRUM-70): es lo que muestra
+        la pantalla de baneados, y de ahí sale el `userId` que se le pasa a
+        `DELETE /servers/{serverId}/bans/{userId}` para revocar.
+
+        Pide `BAN_MEMBERS`, el mismo bit que banear y revocar (ADR-0011): solo
+        quien puede revocar un baneo puede ver la lista. Ser miembro no
+        alcanza, porque quién está baneado y por qué es información de
+        moderación.
+
+        No devuelve nombre ni avatar, ni del baneado ni de quien baneó: son de
+        `identity`, y este servicio no guarda copia de datos que no son suyos.
+        El cliente los resuelve con `GET /users?ids=` (ver identity.yaml).
+
+        La barra final no es decorativa: el gateway enruta
+        `/api/v1/servers/{serverId}/bans/` y no responde a la forma sin barra.
+      operationId: listServerBans
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: >
+            Los baneos del servidor, del más nuevo al más viejo. Una lista
+            vacía si no hay ninguno.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServerBan'
+        '403':
+          description: >
+            Quien pregunta no tiene `BAN_MEMBERS` (CA2), o no es miembro del
+            servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+        '404':
+          description: Servidor inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+
   /servers/{serverId}/bans/{userId}:
     put:
       summary: Banear a un miembro del servidor
@@ -261,9 +310,8 @@ paths:
         que un abandono voluntario: `chat` ya corta el acceso con él, así que
         banear no necesita un evento nuevo ni un consumidor nuevo.
 
-        No hay endpoint para revocar un baneo ni para listar los baneados: los
-        CA no los piden y el bit de `BAN_MEMBERS` ya los contempla para cuando
-        entren.
+        Los baneados se listan con `GET /servers/{serverId}/bans/` y un baneo
+        se revoca con `DELETE` en este mismo path (SCRUM-70).
       operationId: banServerMember
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -315,6 +363,57 @@ paths:
             que el resto: es validación de entrada pura, no depende del estado
             del servidor, así que no filtra nada y falla rápido. Un motivo
             inválido contra un servidor inexistente responde `422`, no `404`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+                
+    delete:
+      summary: Revocar el baneo de un usuario
+      description: >
+        CA1 y CA2 de "Revocar baneo" (SCRUM-70).
+
+        Revocar borra el registro del baneo y nada más: es el mismo registro
+        que chequea `POST /invites/{code}`, así que sin él el usuario vuelve a
+        poder unirse con cualquier invitación válida. Es el CA1. No lo vuelve
+        miembro: tiene que entrar él, aceptando una invitación.
+
+        Es el par del `PUT` sobre el mismo recurso y, como él, idempotente:
+        afirma que el usuario no está baneado. Revocar un baneo que no existe
+        —porque otro moderador lo revocó antes, o porque nunca lo hubo—
+        responde `204` igual.
+
+        Pide `BAN_MEMBERS` (bit 6 del ADR-0011), el mismo bit que banear. Eso
+        es el CA2. No hay jerarquía que respetar: el baneado ya no es miembro
+        ni tiene roles, así que no hay posición contra la cual comparar.
+
+        No publica ningún evento: nadie lo consume. Cuando el usuario vuelve
+        con una invitación sale `community.member.joined`, como en cualquier
+        ingreso.
+      operationId: revokeServerBan
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: >
+            El usuario ya no está baneado del servidor (CA1). Lo mismo si no lo
+            estaba. No vuelve a ser miembro: puede entrar con cualquier
+            invitación válida.
+        '403':
+          description: >
+            Quien revoca no tiene `BAN_MEMBERS` (CA2), o no es miembro del
+            servidor. El permiso se chequea antes de buscar el baneo, así que
+            alguien sin `BAN_MEMBERS` recibe `403` tanto si el usuario está
+            baneado como si no: el código de respuesta no sirve para enumerar
+            baneados.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailError'
+        '404':
+          description: Servidor inexistente.
           content:
             application/json:
               schema:
@@ -1287,6 +1386,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Role'
+
+    ServerBan:
+      description: >
+        Un baneo del servidor. Sin nombres ni avatares, que son de `identity`,
+        y sin el id de la fila, porque los endpoints se dirigen por `user_id`.
+      type: object
+      required: [user_id, banned_by, reason, created_at]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        banned_by:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          description: >
+            Hoy sale sin zona horaria (sin `Z`), así que no cumple `date-time` ni
+            `procesos/convenciones.md`: es la deuda conocida de las fechas de `community`.
 
     DetailError:
       description: >

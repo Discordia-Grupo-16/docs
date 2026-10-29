@@ -290,6 +290,34 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/servers/{serverId}/bans/:
+    get:
+      summary: '[proxy → community] Listar los baneos del servidor'
+      description: >
+        Pide `BAN_MEMBERS` (SCRUM-70). La barra final es parte de la ruta: la
+        tabla de rutas del gateway la declara así y no responde a la forma sin
+        barra.
+      operationId: gatewayListServerBans
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Ver community.yaml → GET /servers/{serverId}/bans/
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: 'community.yaml#/components/schemas/ServerBan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/servers/{serverId}/bans/{userId}:
     put:
       summary: '[proxy → community] Banear a un miembro del servidor'
@@ -312,6 +340,27 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+          
+    delete:
+      summary: '[proxy → community] Revocar el baneo de un usuario'
+      description: >
+        Pide `BAN_MEMBERS` (SCRUM-70). Idempotente: revocar un baneo que no
+        existe es `204`.
+      operationId: gatewayRevokeServerBan
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: Ver community.yaml → DELETE .../bans/{userId}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/v1/servers/{serverId}/invites:
     post:
