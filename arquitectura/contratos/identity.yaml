@@ -281,6 +281,18 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Servicio de almacenamiento (Cloudinary) no disponible.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          description: Tiempo de espera agotado al subir el avatar.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /users/{userId}:
     get:
@@ -329,10 +341,11 @@ paths:
         distinguir mayúsculas. CA2: `status` filtra por estado de la cuenta.
         Paginado por offset, ordenado por `createdAt` desc y `id` desc.
         Devuelve solo los campos necesarios para identificar la cuenta
-        (RNF — Minimización de datos en APIs).
+        (RNF — Minimización de datos en APIs). Incluye `email` aunque es un 
+        dato personal: CA1 busca por email y el endpoint es solo para staff, 
+        que lo necesita para identificar la cuenta.
       operationId: listUsersForAdmin
       parameters:
-        - $ref: '#/components/parameters/XUserId'
         - $ref: '#/components/parameters/XUserRole'
         - in: query
           name: search

@@ -28,9 +28,17 @@ services:
       LOG_LEVEL: info
       SERVICE_NAME: chat
       RABBITMQ_URL: amqp://rabbitmq:5672/
+      # Mismo LiveKit que chat-service (ver su compose): las dos réplicas
+      # firman tokens para el mismo servidor de voz.
+      LIVEKIT_URL: ws://localhost:7880
+      LIVEKIT_API_URL: http://livekit:7880
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: secret
     depends_on:
       chat-mongo:
         condition: service_healthy
+      livekit:
+        condition: service_started
     restart: unless-stopped
     networks:
       - red-local
