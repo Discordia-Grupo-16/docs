@@ -6,9 +6,15 @@ info:
     Servicio `identity`. Cubre las épicas Usuarios y Perfil para el camino
     crítico del Sprint 1 (CP1): Registro de usuarios (#1), Login con email y
     contraseña (#2), Edición de perfil (#4) y Visualización de perfil propio (#5).
-    Fuera de alcance en este sprint: recupero de contraseña, login federado,
-    PIN, 2FA y perfil público — se agregan en un sprint posterior sin romper
-    este contrato.
+    Fuera de alcance en este sprint: PIN y perfil público — se agregan en un
+    sprint posterior sin romper este contrato.
+
+    Sprint 3 (CP3) suma, en una sola cadena de cambios: recupero de contraseña
+    (SCRUM-20, `/password-resets*`), autenticación de dos factores con TOTP
+    (SCRUM-23, `/users/me/mfa/*` y `POST /sessions/mfa`) y login con Google
+    (SCRUM-21, ideal, `POST /sessions/google`). `POST /sessions` pasa a poder
+    responder un desafío de segundo factor en lugar de la sesión; las cuentas
+    sin 2FA no ven ningún cambio.
 
 servers:
   - url: http://localhost:8001
@@ -68,7 +74,13 @@ paths:
               $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
-          description: Login exitoso. Devuelve access y refresh token.
+          description: >
+            Login exitoso. Si la cuenta no tiene 2FA devuelve la sesión
+            (`AuthResult`: access y refresh token). Si tiene 2FA activo
+            (SCRUM-23) devuelve en su lugar un `MfaChallenge` con
+            `mfaRequired: true`, y la sesión se emite recién en
+            `POST /sessions/mfa`. El cliente distingue los dos casos por la
+            presencia de `mfaRequired`.
           content:
             application/json:
               schema:
@@ -76,7 +88,9 @@ paths:
                 required: [data]
                 properties:
                   data:
-                    $ref: '#/components/schemas/AuthResult'
+                    oneOf:
+                      - $ref: '#/components/schemas/AuthResult'
+                      - $ref: '#/components/schemas/MfaChallenge'
         '401':
           description: >
             Credenciales inválidas (email no registrado o contraseña
@@ -92,6 +106,16 @@ paths:
             para que el cliente muestre "cuenta suspendida" en vez de
             "credenciales inválidas". Solo se devuelve si la contraseña es
             correcta, así no revela el estado de una cuenta ajena.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: >
+            Demasiados intentos fallidos para ese email (10 cada 15 minutos).
+            Cuenta el email escrito, exista o no, así que no revela si la
+            cuenta existe; un login correcto limpia el contador. Se suma al
+            límite por IP del gateway.
           content:
             application/problem+json:
               schema:
@@ -183,6 +207,221 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /sessions/mfa:
+    post:
+      summary: Completar el login con el segundo factor
+      description: >
+        CA2, CA3 y CA4 de "Autenticación de dos factores" (SCRUM-23). Segundo
+        paso del login de una cuenta con 2FA: se manda el `mfaToken` que
+        devolvió `POST /sessions` y un código TOTP de 6 dígitos, o bien un
+        código de recuperación (exactamente uno de los dos).
+
+        El `mfaToken` vence a los 5 minutos y admite 5 intentos: al quinto
+        error se invalida y hay que volver a iniciar sesión. Un código TOTP
+        ya usado, o de un paso de 30 segundos anterior al último aceptado, no
+        se acepta (anti-replay). Un código de recuperación sirve una sola vez.
+        La suspensión de la cuenta se vuelve a chequear en este paso.
+      operationId: verifyMfaLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaLoginRequest'
+      responses:
+        '200':
+          description: >
+            Código válido. Devuelve la sesión. Si se entró con un código de
+            recuperación, suma `recoveryCodesRemaining` para recomendar que
+            se genere una lista nueva (CA4).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MfaLoginResult'
+        '401':
+          description: >
+            Código incorrecto (CA3), `mfaToken` vencido, ya usado o agotado
+            por los 5 intentos. En todos los casos el mensaje es el mismo y el
+            cliente decide si vuelve al login por el `detail`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: La cuenta fue suspendida después del primer paso.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: >
+            Cuerpo inválido: falta el `mfaToken`, o no viene exactamente uno
+            de `code` y `recoveryCode`, o `code` no tiene 6 dígitos.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /sessions/google:
+    post:
+      summary: Iniciar sesión con Google
+      description: >
+        Historia ideal "Login con Google" (SCRUM-21). El cliente obtiene un ID
+        token de Google (Google Identity Services en web, `expo-auth-session`
+        en mobile) y lo manda acá. `identity` lo verifica: firma, `iss`, `exp`,
+        `aud` contra los client ids configurados y `email_verified`.
+
+        La cuenta se busca primero por el `sub` de Google; si no aparece, por
+        email verificado y se vincula (CA2); si tampoco existe, se crea (CA1).
+        Una cuenta creada así no tiene contraseña y no puede entrar por
+        `POST /sessions`. Si la cuenta tiene 2FA, responde `MfaChallenge`, igual
+        que el login normal.
+      operationId: loginWithGoogle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleLoginRequest'
+      responses:
+        '200':
+          description: >
+            Login exitoso. `AuthResult` o, si la cuenta tiene 2FA,
+            `MfaChallenge`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    oneOf:
+                      - $ref: '#/components/schemas/AuthResult'
+                      - $ref: '#/components/schemas/MfaChallenge'
+        '401':
+          description: ID token inválido, vencido, de otra audiencia o con el email sin verificar.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: La cuenta está suspendida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: >
+            No se pudo contactar a Google para validar el token (CA3). El
+            cliente muestra "No pudimos conectar con Google. Ingresá con tu
+            correo y contraseña" y deja visible el formulario normal.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /password-resets:
+    post:
+      summary: Pedir el link para recuperar la contraseña
+      description: >
+        CA1 y CA4 de "Recupero de contraseña" (SCRUM-20). Responde siempre
+        `202` con el mismo cuerpo, exista o no la cuenta, esté suspendida o
+        no, y se haya superado o no el límite de emails por cuenta (3 por
+        hora). Así no revela qué emails están registrados. El email se manda
+        en segundo plano para que el tiempo de respuesta tampoco lo revele.
+
+        El link lleva el token en el fragmento
+        (`<PASSWORD_RESET_URL>#token=...`), que no viaja al servidor. El token
+        es de un solo uso, vence en 1 hora y pedir uno nuevo invalida los
+        anteriores de esa cuenta.
+      operationId: requestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+      responses:
+        '202':
+          description: Pedido recibido. Si el email está registrado, llega el link.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PasswordResetAccepted'
+        '422':
+          description: El email no tiene formato válido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /password-resets/check:
+    post:
+      summary: Verificar que un token de recupero sirve
+      description: >
+        CA2 de "Recupero de contraseña". Lo usa la pantalla del link para
+        avisar si el enlace sirve antes de que el usuario escriba la
+        contraseña nueva. No consume el token.
+      operationId: checkPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetToken'
+      responses:
+        '204':
+          description: El token existe, no venció y no se usó.
+        '400':
+          description: >
+            El enlace no es válido o ya venció. Es el mismo error para un
+            token inexistente, vencido o ya usado (CA2).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /password-resets/confirm:
+    post:
+      summary: Cambiar la contraseña con un token de recupero
+      description: >
+        CA3 de "Recupero de contraseña". En una sola transacción guarda la
+        contraseña nueva, marca el token como usado y revoca todas las
+        sesiones de la cuenta (sus `jti` van al denylist de Redis, ADR-0010).
+        El recupero no saltea el 2FA: si la cuenta lo tiene activo, el login
+        siguiente lo sigue pidiendo.
+      operationId: confirmPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+      responses:
+        '204':
+          description: Contraseña cambiada y sesiones anteriores revocadas.
+        '400':
+          description: El enlace no es válido o ya venció (CA2).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: >
+            La contraseña nueva no cumple los requisitos mínimos (mismas
+            reglas que el registro). El token no se consume.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /users/me:
     get:
@@ -289,6 +528,160 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '504':
           description: Tiempo de espera agotado al subir el avatar.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/mfa/setup:
+    post:
+      summary: Empezar la activación del 2FA
+      description: >
+        CA1 de "Autenticación de dos factores" (SCRUM-23). Genera un secreto
+        TOTP, lo guarda cifrado y todavía sin activar, y devuelve el secreto y
+        la URI `otpauth://` con la que el cliente dibuja el QR (el servidor no
+        genera imágenes). Llamarlo de nuevo antes de activar pisa el secreto
+        pendiente.
+      operationId: setupMfa
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+      responses:
+        '200':
+          description: Secreto pendiente de activación.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MfaSetupResult'
+        '409':
+          description: El 2FA ya está activo. Hay que desactivarlo antes de volver a configurarlo.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/mfa/enable:
+    post:
+      summary: Activar el 2FA con el primer código
+      description: >
+        CA1 de "Autenticación de dos factores". Verifica un código TOTP contra
+        el secreto pendiente, activa el 2FA y devuelve los 10 códigos de
+        recuperación. Es la única vez que se muestran en claro: se guardan
+        hasheados.
+      operationId: enableMfa
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaCodeRequest'
+      responses:
+        '200':
+          description: 2FA activado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MfaRecoveryCodes'
+        '400':
+          description: El código no es válido, o no hay una activación pendiente (falta llamar a `setup`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: El 2FA ya está activo.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/mfa/recovery-codes:
+    post:
+      summary: Generar una lista nueva de códigos de recuperación
+      description: >
+        CA4 de "Autenticación de dos factores". Pide un código TOTP vigente
+        (no uno de recuperación) y reemplaza la lista: los códigos anteriores
+        dejan de servir, usados o no.
+      operationId: regenerateMfaRecoveryCodes
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaCodeRequest'
+      responses:
+        '200':
+          description: Lista nueva, mostrada una sola vez.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MfaRecoveryCodes'
+        '400':
+          description: El código no es válido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: El 2FA no está activo.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/mfa/disable:
+    post:
+      summary: Desactivar el 2FA
+      description: >
+        CA5 de "Autenticación de dos factores". Pide la contraseña de la
+        cuenta; borra el secreto y todos los códigos de recuperación. Una
+        cuenta creada con Google y sin contraseña no puede desactivarlo por
+        acá (409).
+      operationId: disableMfa
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaDisableRequest'
+      responses:
+        '204':
+          description: 2FA desactivado.
+        '401':
+          description: La contraseña es incorrecta.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: El 2FA no está activo, o la cuenta no tiene contraseña.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Demasiados intentos de contraseña en `disable`.
           content:
             application/problem+json:
               schema:
@@ -701,6 +1094,136 @@ components:
         bio:
           type: string
           maxLength: 300
+
+    MfaChallenge:
+      type: object
+      description: >
+        Respuesta de `POST /sessions` (y de `POST /sessions/google`) cuando la
+        cuenta tiene 2FA activo, en lugar de la sesión.
+      required: [mfaRequired, mfaToken]
+      properties:
+        mfaRequired:
+          type: boolean
+          enum: [true]
+        mfaToken:
+          type: string
+          description: >
+            Token opaco de 32 bytes, de un solo uso, que vence a los 5 minutos
+            y admite 5 intentos. Vive solo en memoria del cliente: nunca va a
+            storage ni a una URL.
+
+    MfaLoginRequest:
+      type: object
+      description: Exactamente uno de `code` y `recoveryCode`.
+      required: [mfaToken]
+      properties:
+        mfaToken:
+          type: string
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+          description: Código TOTP de 6 dígitos.
+        recoveryCode:
+          type: string
+          pattern: '^[a-z0-9]{4}-[a-z0-9]{4}$'
+          description: Código de recuperación con el formato `xxxx-xxxx`.
+
+    MfaLoginResult:
+      allOf:
+        - $ref: '#/components/schemas/AuthResult'
+        - type: object
+          properties:
+            recoveryCodesRemaining:
+              type: integer
+              minimum: 0
+              description: >
+                Solo viene cuando se entró con un código de recuperación:
+                cuántos quedan sin usar.
+
+    MfaSetupResult:
+      type: object
+      required: [secret, otpauthUri]
+      properties:
+        secret:
+          type: string
+          description: Secreto en base32, para cargarlo a mano en la app autenticadora.
+        otpauthUri:
+          type: string
+          description: >
+            URI `otpauth://totp/...` con el issuer "Discordia". El cliente la
+            dibuja como QR; en mobile también se puede abrir con `Linking`.
+
+    MfaCodeRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+
+    MfaRecoveryCodes:
+      type: object
+      required: [recoveryCodes]
+      properties:
+        recoveryCodes:
+          type: array
+          minItems: 10
+          maxItems: 10
+          items:
+            type: string
+            pattern: '^[a-z0-9]{4}-[a-z0-9]{4}$'
+          description: Se muestran una sola vez; en la base quedan hasheados.
+
+    MfaDisableRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+
+    GoogleLoginRequest:
+      type: object
+      required: [idToken]
+      properties:
+        idToken:
+          type: string
+          description: ID token (JWT) emitido por Google.
+
+    PasswordResetRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    PasswordResetAccepted:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          description: Siempre el mismo texto, exista o no la cuenta.
+          example: Si el correo está registrado, te va a llegar un link para cambiar la contraseña.
+
+    PasswordResetToken:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: Token del fragmento del link (`#token=...`), 43 caracteres base64url.
+
+    PasswordResetConfirmRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+        newPassword:
+          type: string
+          minLength: 8
+          description: Mismas reglas que el registro.
 
     ErrorResponse:
       type: object
