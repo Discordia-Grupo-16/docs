@@ -15,6 +15,8 @@ info:
     - /api/v1/servers*, /api/v1/invites* → community
     - /api/v1/channels/{channelId}/messages, /api/v1/channels/{channelId}/ws → chat-y-real-time
     - /api/v1/admin/users* → identity (backoffice, solo staff)
+    - /api/v1/password-resets* → identity (públicas, sin JWT)
+    - /api/v1/ws-ticket → lo atiende el propio gateway (sin upstream)
     El gateway valida el JWT recibido en `Authorization: Bearer <token>` y,
     antes de reenviar la request al servicio correspondiente, la enriquece
     con dos headers internos derivados de su payload (ver JwtClaims en
@@ -87,7 +89,9 @@ paths:
                 required: [data]
                 properties:
                   data:
-                    $ref: 'identity.yaml#/components/schemas/AuthResult'
+                    oneOf:
+                      - $ref: 'identity.yaml#/components/schemas/AuthResult'
+                      - $ref: 'identity.yaml#/components/schemas/MfaChallenge'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '429':
@@ -98,6 +102,286 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/sessions/mfa:
+    post:
+      summary: '[proxy → identity] Segundo paso del login con 2FA'
+      description: >
+        Ruta pública (el usuario todavía no tiene sesión). Límite propio de
+        5 por minuto por IP, además del límite de intentos del `mfaToken`.
+      operationId: gatewayVerifyMfaLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'identity.yaml#/components/schemas/MfaLoginRequest'
+      responses:
+        '200':
+          description: Ver identity.yaml → POST /sessions/mfa
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'identity.yaml#/components/schemas/MfaLoginResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/sessions/google:
+    post:
+      summary: '[proxy → identity] Login con Google (ideal)'
+      description: Ruta pública, con límite por IP.
+      operationId: gatewayLoginWithGoogle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'identity.yaml#/components/schemas/GoogleLoginRequest'
+      responses:
+        '200':
+          description: Ver identity.yaml → POST /sessions/google
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    oneOf:
+                      - $ref: 'identity.yaml#/components/schemas/AuthResult'
+                      - $ref: 'identity.yaml#/components/schemas/MfaChallenge'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: Google no responde. Ver identity.yaml → POST /sessions/google
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/password-resets:
+    post:
+      summary: '[proxy → identity] Pedir el link de recupero de contraseña'
+      description: >
+        Ruta pública. Límite por IP de 5 pedidos cada 15 minutos; el límite de
+        emails por cuenta lo aplica `identity` sin cambiar la respuesta.
+      operationId: gatewayRequestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'identity.yaml#/components/schemas/PasswordResetRequest'
+      responses:
+        '202':
+          description: Ver identity.yaml → POST /password-resets
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/password-resets/check:
+    post:
+      summary: '[proxy → identity] Verificar un token de recupero'
+      description: Ruta pública, con límite por IP de 10 por minuto.
+      operationId: gatewayCheckPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'identity.yaml#/components/schemas/PasswordResetToken'
+      responses:
+        '204':
+          description: Ver identity.yaml → POST /password-resets/check
+        '400':
+          description: El enlace no es válido o ya venció.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/password-resets/confirm:
+    post:
+      summary: '[proxy → identity] Cambiar la contraseña con un token de recupero'
+      description: Ruta pública, con límite por IP de 10 por minuto.
+      operationId: gatewayConfirmPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'identity.yaml#/components/schemas/PasswordResetConfirmRequest'
+      responses:
+        '204':
+          description: Ver identity.yaml → POST /password-resets/confirm
+        '400':
+          description: El enlace no es válido o ya venció.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/users/me/mfa/setup:
+    post:
+      summary: '[proxy → identity] Empezar la activación del 2FA'
+      operationId: gatewaySetupMfa
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ver identity.yaml → POST /users/me/mfa/setup
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'identity.yaml#/components/schemas/MfaSetupResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/users/me/mfa/enable:
+    post:
+      summary: '[proxy → identity] Activar el 2FA'
+      operationId: gatewayEnableMfa
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'identity.yaml#/components/schemas/MfaCodeRequest'
+      responses:
+        '200':
+          description: Ver identity.yaml → POST /users/me/mfa/enable
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'identity.yaml#/components/schemas/MfaRecoveryCodes'
+        '400':
+          description: El código no es válido o no hay activación pendiente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/users/me/mfa/recovery-codes:
+    post:
+      summary: '[proxy → identity] Regenerar los códigos de recuperación'
+      operationId: gatewayRegenerateMfaRecoveryCodes
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'identity.yaml#/components/schemas/MfaCodeRequest'
+      responses:
+        '200':
+          description: Ver identity.yaml → POST /users/me/mfa/recovery-codes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'identity.yaml#/components/schemas/MfaRecoveryCodes'
+        '400':
+          description: El código no es válido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/users/me/mfa/disable:
+    post:
+      summary: '[proxy → identity] Desactivar el 2FA'
+      description: Con límite propio por IP, porque acepta una contraseña.
+      operationId: gatewayDisableMfa
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'identity.yaml#/components/schemas/MfaDisableRequest'
+      responses:
+        '204':
+          description: Ver identity.yaml → POST /users/me/mfa/disable
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/ws-ticket:
+    post:
+      summary: Emitir un ticket de un solo uso para abrir el WebSocket
+      description: >
+        Lo atiende el propio gateway, sin servicio upstream (SCRUM-150,
+        ADR-0008). Requiere un JWT válido y no revocado. El ticket es opaco,
+        se guarda en Redis (`wsticket:<sha256(ticket)>`) con TTL de 30
+        segundos y se canjea una sola vez en el handshake del WebSocket
+        (`GETDEL`), así que sirve aunque haya varias instancias del gateway.
+        Cada intento de conexión, incluidas las reconexiones, pide un ticket
+        nuevo. Límite de 30 por minuto para no frenar las reconexiones.
+      operationId: gatewayIssueWsTicket
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ticket emitido.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WsTicket'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 
     delete:
       summary: '[proxy → identity] Logout'
@@ -490,17 +774,36 @@ paths:
     get:
       summary: '[proxy → chat-y-real-time] Upgrade a WebSocket para un canal'
       description: >
-        El gateway valida el JWT en el handshake antes de completar el
-        upgrade y de rutear la conexión persistente hacia una instancia del
-        servicio de chat (RNF — Autorización para unirse a un canal).
+        El gateway autentica el handshake antes de completar el upgrade y de
+        rutear la conexión persistente hacia una instancia del servicio de
+        chat (RNF — Autorización para unirse a un canal).
+
+        Desde SCRUM-150 el handshake se autentica con un **ticket de un solo
+        uso** (`?ticket=`, ver `POST /api/v1/ws-ticket`) en lugar del JWT en
+        la URL: el gateway lo canjea, vuelve a chequear que el `jti` no esté
+        revocado y pone los mismos headers de identidad (`X-User-Id`,
+        `X-User-Role`) que con el JWT. Un ticket vencido, ya canjeado o
+        inexistente responde 401.
+
+        Transición: mientras `WS_ALLOW_QUERY_TOKEN=true` el gateway también
+        acepta `?access_token=` para no cortar a los clientes que todavía no
+        cambiaron. Un PR posterior lo apaga y deja el ticket como única forma.
       operationId: gatewayChannelWebSocket
       security:
-        - bearerAuth: []
+        - wsTicket: []
       parameters:
         - $ref: '#/components/parameters/ChannelId'
+        - in: query
+          name: ticket
+          required: true
+          schema:
+            type: string
+          description: Ticket emitido por `POST /api/v1/ws-ticket`. Sirve una vez y vence a los 30 segundos.
       responses:
         '101':
           description: Switching Protocols.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -739,6 +1042,11 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    wsTicket:
+      type: apiKey
+      in: query
+      name: ticket
+      description: Ticket de un solo uso para el handshake del WebSocket (ver POST /api/v1/ws-ticket).
 
   parameters:
     ServerId:
@@ -815,6 +1123,18 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
+    WsTicket:
+      type: object
+      required: [ticket, expiresIn]
+      properties:
+        ticket:
+          type: string
+          description: Opaco. Se guarda solo su SHA-256 en Redis.
+        expiresIn:
+          type: integer
+          enum: [30]
+          description: Segundos hasta que el ticket vence si no se canjea.
+
     ErrorResponse:
       type: object
       required: [type, title, status, detail, instance]

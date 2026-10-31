@@ -113,6 +113,7 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 | `chat.membership.changed` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ serverId, userId }` ² | SCRUM-146 |
 | `identity.user.suspended` | `identity` | `chat` (cierre de sockets, cola por instancia), `metrics` (fan-out) | `{ userId, suspendedBy }` ⁵ | SCRUM-81 |
 | `identity.user.reactivated` | `identity` | `metrics` (fan-out) | `{ userId, reactivatedBy }` ⁵ | SCRUM-82 |
+| `identity.user.profile-updated` | `identity` | `chat` (aviso a los clientes conectados, cola por instancia), `metrics` (fan-out) | `{ userId }` ⁶ | SCRUM-167 |
 
 ¹ Payload de los cinco eventos de `community` propuesto por `chat`, que es quien primero los necesita (proyección local de autorización). Es una propuesta, no el contrato: el dueño de `community` la confirma o la reemplaza en la historia que implementa cada evento y actualiza esta tabla en ese PR. Para el CP1 solo son obligatorios `member.joined` y `channel.created` (la demo depende de ellos); `chat` ya consume también `member.left` y `channel.deleted`, y se catalogan todos ahora para que el nombre y el payload no cambien cuando se implementen. `channel.updated` no lo consume `chat`: el nombre y el tipo de un canal no cambian quién puede escribir en él (la regla del CP1 es que ser miembro del servidor habilita todos sus canales), así que su cola ni siquiera se bindea a ese evento.
 
@@ -158,6 +159,13 @@ Y las que agrega `channelOverrides` (ADR-0012):
 - **Qué hace `chat`:** cada instancia cierra los sockets de ese `userId` con el código `4403` (ver el endpoint del WebSocket en [`contratos/chat.yaml`](contratos/chat.yaml)). Solo cierra las conexiones **abiertas antes** del `occurredAt` del evento: si el evento llega tarde, después de una reactivación y un login nuevo, no corta la sesión nueva. Con esa regla el handler no guarda estado y es idempotente: un duplicado no encuentra nada que cerrar.
 - **Si una instancia estaba caída** cuando se publicó el evento, se lo pierde (la cola por instancia nace al conectar), pero tampoco tenía sockets: se cayeron con ella, y al reconectar el gateway ya rechaza el token.
 - **`reactivated` no lo consume `chat`:** no hay nada que reabrir. El usuario vuelve a loguearse y obtiene un token nuevo. El perfil público lo resuelve `identity` con su propio estado, sin eventos.
+
+⁶ Cambio de perfil (D17). `userId` es la cuenta cuyo perfil cambió. **El payload es solo el id, a propósito:** por el bus no viaja ningún dato personal (ni nombre, ni bio, ni `avatarUrl`), y quien se entera vuelve a pedir el perfil por HTTP, así que siempre ve el estado actual y no el del momento del evento.
+
+- **Cuándo se publica:** después del commit, en `PATCH /users/me` y en `PUT /users/me/avatar`. Un cambio que no modifica nada no publica.
+- **Nombre:** con guión medio (`profile-updated`), no guión bajo, por la regla de la sección "Convención de nombres": con `profile_updated` ningún consumidor en Go podría bindear.
+- **Qué hace `chat`:** cada instancia avisa por sus sockets abiertos a los clientes que comparten un servidor con ese usuario, para que vuelvan a pedir el perfil sin recargar. Es una **cola por instancia**: cada instancia tiene sus propias conexiones. No escribe en Mongo.
+- **Idempotencia:** un duplicado solo repite un aviso que provoca una relectura; no hay estado que corromper, así que no necesita `lastEventAt`.
 
 ## Nota sobre los dos lenguajes
 
