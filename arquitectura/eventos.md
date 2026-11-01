@@ -102,20 +102,20 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 | Evento | Publica | Consumen | Payload (`data`) | ADR / historia |
 |---|---|---|---|---|
 | `identity.user.registered` | `identity` | `metrics` (fan-out) | *A definir por `identity`* | Historia de registro — dueño `identity` |
-| `community.server.created` | `community` | `metrics` (fan-out) | *A definir por `community`* | Historia de creación de servidor — dueño `community` |
-| `community.channel.created` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ channelId, serverId, name, type }` ¹ | SCRUM-137 |
-| `community.channel.updated` | `community` | `metrics` (fan-out) | `{ channelId, name?, type? }` ¹ | SCRUM-137 |
-| `community.channel.deleted` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ channelId }` ¹ | SCRUM-137 |
-| `community.member.joined` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ serverId, userId }` ¹ | SCRUM-137 |
-| `community.member.left` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ serverId, userId, reason }` ¹ ³ | SCRUM-137, SCRUM-68, SCRUM-69 |
-| `community.member.permissions-changed` | `community` | `chat` (proyección de autorización), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61 |
+| `community.server.created` | `community` | `chat` (avisos de UI, cola por instancia) ⁷, `metrics` (fan-out) | `{ serverId, name, ownerId }` ⁷ | Historia de creación de servidor — dueño `community`; ADR-0017 |
+| `community.channel.created` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ channelId, serverId, name, type }` ¹ | SCRUM-137; ADR-0017 |
+| `community.channel.updated` | `community` | `chat` (avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ channelId, serverId, name, type }` ¹ ⁷ | SCRUM-137; ADR-0017 |
+| `community.channel.deleted` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ channelId, serverId }` ¹ ⁷ | SCRUM-137; ADR-0017 |
+| `community.member.joined` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ serverId, userId }` ¹ | SCRUM-137; ADR-0017 |
+| `community.member.left` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ serverId, userId, reason }` ¹ ³ | SCRUM-137, SCRUM-68, SCRUM-69; ADR-0017 |
+| `community.member.permissions-changed` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61; ADR-0017 |
 | `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId }` | SCRUM-41 |
 | `chat.membership.changed` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ serverId, userId }` ² | SCRUM-146 |
 | `identity.user.suspended` | `identity` | `chat` (cierre de sockets, cola por instancia), `metrics` (fan-out) | `{ userId, suspendedBy }` ⁵ | SCRUM-81 |
 | `identity.user.reactivated` | `identity` | `metrics` (fan-out) | `{ userId, reactivatedBy }` ⁵ | SCRUM-82 |
 | `identity.user.profile-updated` | `identity` | `chat` (aviso a los clientes conectados, cola por instancia), `metrics` (fan-out) | `{ userId }` ⁶ | SCRUM-167 |
 
-¹ Payload de los cinco eventos de `community` propuesto por `chat`, que es quien primero los necesita (proyección local de autorización). Es una propuesta, no el contrato: el dueño de `community` la confirma o la reemplaza en la historia que implementa cada evento y actualiza esta tabla en ese PR. Para el CP1 solo son obligatorios `member.joined` y `channel.created` (la demo depende de ellos); `chat` ya consume también `member.left` y `channel.deleted`, y se catalogan todos ahora para que el nombre y el payload no cambien cuando se implementen. `channel.updated` no lo consume `chat`: el nombre y el tipo de un canal no cambian quién puede escribir en él (la regla del CP1 es que ser miembro del servidor habilita todos sus canales), así que su cola ni siquiera se bindea a ese evento.
+¹ Payload de los cinco eventos de `community` propuesto por `chat`, que es quien primero los necesita (proyección local de autorización). Es una propuesta, no el contrato: el dueño de `community` la confirma o la reemplaza en la historia que implementa cada evento y actualiza esta tabla en ese PR. Para el CP1 solo son obligatorios `member.joined` y `channel.created` (la demo depende de ellos); `chat` ya consume también `member.left` y `channel.deleted`, y se catalogan todos ahora para que el nombre y el payload no cambien cuando se implementen. `channel.updated` no lo consume la **proyección** de `chat`: el nombre y el tipo de un canal no cambian quién puede escribir en él (la regla del CP1 es que ser miembro del servidor habilita todos sus canales), así que esa cola ni siquiera se bindea a ese evento. Lo que sí lo consume es la cola de avisos de UI (nota ⁷), que no usa la proyección.
 
 ² Relevo interno de `chat`, no un hecho de negocio nuevo: lo publica la instancia que aplicó un `community.member.joined` o `.left` a su proyección, con el `eventId` de ese evento como `causationId`, para que la instancia que tiene al usuario conectado lo suscriba o lo desuscriba del servidor. No dice si el usuario entró o salió: quien lo recibe relee la proyección, así que no depende del orden de llegada ni de los duplicados. `metrics` lo recibe por su binding `#`, pero no tiene nada que contar: el hecho de negocio es el evento de `community` que lo causó.
 
@@ -166,6 +166,14 @@ Y las que agrega `channelOverrides` (ADR-0012):
 - **Nombre:** con guión medio (`profile-updated`), no guión bajo, por la regla de la sección "Convención de nombres": con `profile_updated` ningún consumidor en Go podría bindear.
 - **Qué hace `chat`:** cada instancia avisa por sus sockets abiertos a los clientes que comparten un servidor con ese usuario, para que vuelvan a pedir el perfil sin recargar. Es una **cola por instancia**: cada instancia tiene sus propias conexiones. No escribe en Mongo.
 - **Idempotencia:** un duplicado solo repite un aviso que provoca una relectura; no hay estado que corromper, así que no necesita `lastEventAt`.
+
+⁷ Avisos de UI ([ADR-0017](../adr/0017-eventos-de-ui-por-el-websocket.md), SCRUM-167). Cada instancia de `chat` traduce estos eventos a un frame `invalidate` para sus clientes conectados, que vuelven a pedir por HTTP lo que quedó viejo. El frame no lleva datos de `community` ni de `identity`, y la tabla de qué evento genera qué aviso está en el ADR.
+
+- **Cola por instancia, y propia.** Cada instancia tiene sus propias conexiones, así que todas tienen que ver cada evento: con una cola compartida lo recibiría una sola. Va aparte de la cola de la proyección (que sí es compartida, porque escribe en un Mongo único) y de la de mensajes, para que una lectura lenta no demore los broadcasts. Como RabbitMQ le entrega una copia a cada cola bindeada, que esta cola exista no le saca nada a la proyección.
+- **No escribe en Mongo.** Solo `identity.user.profile-updated` lee la proyección, para saber los servidores del usuario.
+- **Idempotencia:** igual que `profile-updated` (nota ⁶), un duplicado o un evento fuera de orden repite un aviso que provoca una relectura. No hay `lastEventAt` que mantener.
+- **Los payloads de esta fila salen de lo que `community` publica hoy.** `server.created` lleva `{ serverId, name, ownerId }`, y `channel.updated` y `channel.deleted` llevan `serverId`, que el catálogo no listaba y que el consumidor necesita para saber a quiénes avisar. Un consumidor que no use el campo lo ignora.
+- **Requisito para los productores:** el evento se publica **después del commit**. Si no, el cliente relee antes de que el dato exista.
 
 ## Nota sobre los dos lenguajes
 
