@@ -1,8 +1,10 @@
 # ADR-0011: Roles y permisos en `community`, con un bitmask propagado por evento
 
-- **Estado:** Propuesto
-- **Fecha:** 2026-10-03
-- **Decisores:** pendiente de ratificar en el taller de contratos del CP2 (INF-20)
+- **Estado:** Aceptado
+- **Fecha:** 2026-10-05
+- **Decisores:** Persona 2 (dueña de Roles y Permisos en el CP2), como implementadora de la decisión
+  D2 del plan del sprint, que la deja explícitamente en manos de quien la implementa. Se presenta en
+  la weekly; quien quiera cambiarla escribe un ADR que supersede a este, no se reabre la discusión.
 - **Servicios afectados:** `community`, `chat-and-real-time`, `web-app`, `mobile`, `backoffice`
 
 > Este ADR **modifica parcialmente** al [ADR-0001](0001-stack-y-lenguajes-por-servicio.md): deja sin
@@ -120,7 +122,7 @@ consecuencias: lo que se escribe en los dos lenguajes se desincroniza.
 
 ### Cómo viaja
 
-`community` publica **`community.member.permissions_changed`** cada vez que cambian los permisos de
+`community` publica **`community.member.permissions-changed`** cada vez que cambian los permisos de
 un rol, cambia la asignación de roles de un miembro, o entra un miembro nuevo. El evento lleva el
 servidor y la **lista de los miembros afectados con su bitmask ya calculado**:
 

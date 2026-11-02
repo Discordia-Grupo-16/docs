@@ -1,6 +1,6 @@
 # ADR-0001: Stack y lenguajes por microservicio
 
-- **Estado:** Modificado parcialmente por [ADR-0011](0011-roles-y-permisos-en-community.md)
+- **Estado:** Reemplazado parcialmente por [ADR-0011](0011-roles-y-permisos-en-community.md)
 - **Fecha:** 2026-09-04
 - **Decisores:** equipo completo (reunión de kickoff)
 - **Servicios afectados:** todos

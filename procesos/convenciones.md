@@ -33,6 +33,16 @@ Minúscula, guion medio, en inglés y en singular salvo que el plural sea el dom
 - `title` y `detail` en **español**, a diferencia del resto de la superficie de API: son los dos únicos campos que el front puede llegar a mostrarle al usuario tal cual, así que van en el idioma del producto. Los nombres de campo, los paths y los valores de `type` siguen en inglés.
 - Hoy `type` está fijado en `about:blank` en los cuatro contratos, así que **no hay un código de error machine-readable**: el front distingue por `status` y por el endpoint. Si alguna pantalla necesita más granularidad, RFC 7807 lo permite con un `type` propio, pero eso es un cambio de contrato y va con ADR.
 
+## Listados paginados
+
+- **Forma de la respuesta:** `{ "data": [...], "meta": { ... } }`. `data` sigue siendo el envelope de siempre y `meta` va al lado, solo en los listados paginados. Un cliente que lea solo `data` no se rompe.
+- **Offset con total.** Para listados con búsqueda o filtros, de volumen acotado, donde interesa "página N de M" (backoffice: usuarios SCRUM-85, servidores SCRUM-83; miembros de un servidor SCRUM-157).
+  - Query: `limit` (20 por defecto, máximo 100) y `offset` (0 por defecto).
+  - `meta: { total, limit, offset }`. `total` cuenta los elementos que cumplen los filtros, sin paginar.
+  - El orden tiene que ser determinístico, con desempate por `id` (por ejemplo `createdAt` desc, `id` desc). Si no, las páginas repiten o saltean elementos.
+- **Cursor.** Para flujos que crecen todo el tiempo y se recorren en orden, como el historial de mensajes (SCRUM-46): `before`/`after` con el id del último elemento visto, más `limit`. No hay total ni salto a la página N. La forma de la respuesta la define su contrato (`chat.yaml`).
+- **Sin paginar.** Los listados chicos y acotados por naturaleza (por ejemplo, los canales de un servidor) pueden devolver todo en `data`.
+
 ## Tópicos y eventos
 
 Ver [`arquitectura/eventos.md`](../arquitectura/eventos.md).

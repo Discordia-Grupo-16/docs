@@ -17,7 +17,7 @@ Este `docker-compose.yaml` levanta **todos los servicios a la vez**, para ensaya
 
 ```
 discordia/
-├── docs/                      (o discordia-docs/)
+├── docs/
 │   └── infra/
 │       ├── docker-compose.yaml
 │       ├── docker-compose.override.yaml
@@ -40,7 +40,13 @@ Requiere **Docker Compose v2.20+** (por el soporte de `include:`). Verificá con
 docker compose version
 ```
 
-Desde esta carpeta:
+Primero, la configuración del canal de voz, en el `.env` de `chat-and-real-time` (este compose lo lee de ahí, no hace falta un `.env` en esta carpeta). Sin ella el compose no arranca (`required variable LIVEKIT_... is missing a value`):
+
+```bash
+cd ../../chat-and-real-time && cp .env.example .env   # y completá LIVEKIT_NODE_IP y LIVEKIT_URL
+```
+
+Después, desde esta carpeta:
 
 ```bash
 docker compose up --build
@@ -62,6 +68,8 @@ Esto refleja la arquitectura real ([ADR-0002](../adr/0002-api-gateway-y-publicac
 
 - No podés pegarle a `identity-service` directo con Postman/curl para descartar si un bug es del gateway o del servicio.
 - No podés abrir un cliente de base de datos local contra `identity-db`, `community-db` o `chat-mongo` para mirar el estado de los datos a mitad de la demo.
+
+**La excepción es `livekit`**, el servidor de voz local que viene del compose de `chat` ([ADR-0005](../adr/0005-tecnologia-del-canal-de-voz.md)). El audio va directo del cliente a LiveKit, sin pasar por el gateway, así que publica siempre sus puertos: `7880/tcp` (señalización), `7881/tcp` y `7882/udp` (audio). Si alguno está ocupado o bloqueado por el firewall, la voz no conecta.
 
 **Para debuggear con los puertos abiertos**, usá [`docker-compose.demo.yaml`](./docker-compose.demo.yaml) en vez del override por defecto — ver la sección [Variante para pruebas y debugging](#variante-para-pruebas-y-debugging) más abajo. No modifiques `docker-compose.override.yaml` para esto: ese archivo es el que representa la arquitectura real (todo pasa por el gateway) y se aplica siempre por default con `docker compose up`.
 
@@ -103,8 +111,21 @@ Esta variante **no se usa para la demo frente al corrector** — ahí corre solo
 | `identity-redis` | — | No |
 | `community-db` | — | No |
 | `chat-mongo` | — | No |
+| `livekit` | — (LiveKit OSS en modo dev) | Sí (`7880`, `7881`, `7882/udp`) |
 
 > Los nombres de la primera columna son los definitivos para el nombre de host dentro de Docker: cada servicio se llama `<dominio>-service` en su propio compose (`identity-service`, `chat-service`, `community-service`), independientemente del nombre canónico de `servicios.md`. Es una decisión tomada, no una inconsistencia a resolver — el gateway y este override dependen de que se mantenga ese sufijo `-service` en todo servicio nuevo que se agregue.
+
+## Probar el canal de voz
+
+`chat-service` (y `chat-service-2` en la variante multichat) firma tokens con `LIVEKIT_URL`, `LIVEKIT_API_KEY` y `LIVEKIT_API_SECRET` del `.env` de `chat-and-real-time` (ver su `.env.example`), y `livekit` arranca con `--node-ip` = `LIVEKIT_NODE_IP`.
+
+- **LiveKit local** (lo normal). Claves públicas del modo dev (`devkey`/`secret`). `LIVEKIT_NODE_IP` y `LIVEKIT_URL` llevan la IP de esta máquina en la red, **nunca `127.0.0.1` ni `localhost`**: los navegadores descartan esa dirección para el audio y la unión termina en "La voz no está disponible en este momento". Si la IP cambia (otra red, DHCP), actualizá ese `.env` y volvé a levantar. Con esa IP también se conecta un teléfono en el mismo Wi-Fi.
+- **LiveKit Cloud.** La URL `wss://` y las claves del proyecto, que son secretos ([ADR-0007](../adr/0007-gestion-de-secretos.md)). `LIVEKIT_NODE_IP` sigue siendo obligatoria: el `livekit` local se levanta igual, aunque no se use.
+
+Para probar:
+
+1. En la web, unite a un canal de voz desde dos navegadores o dos pestañas con usuarios distintos: los dos tienen que verse en la lista de la llamada y escucharse.
+2. Sin la web, pedí el token a mano contra el gateway: `curl -i -X POST -H "Authorization: Bearer <token>" localhost:8080/api/v1/channels/<canal de voz>/voice-tokens` responde `200` con `url` = el `LIVEKIT_URL` del `.env` de `chat-and-real-time`.
 
 ## Qué falta agregar
 
