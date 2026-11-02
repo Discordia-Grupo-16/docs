@@ -1,7 +1,9 @@
 include:
   - ../../api-gateway/compose.yaml
   - ../../identity/docker-compose.yml
-  - ../../chat-and-real-time/docker-compose.yml
+  # chat toma sus variables (la voz) de su propio .env, no de esta carpeta.
+  - path: ../../chat-and-real-time/docker-compose.yml
+    env_file: ../../chat-and-real-time/.env
   - ../../community/docker-compose.yml
 
 networks:
