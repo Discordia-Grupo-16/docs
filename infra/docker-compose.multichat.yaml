@@ -2,7 +2,10 @@
 #
 # Se corre encadenado sobre los otros dos archivos:
 #
-#   docker compose -f docker-compose.yaml -f docker-compose.override.yaml -f docker-compose.multichat.yaml up --build
+#   docker compose --env-file ../../chat-and-real-time/.env -f docker-compose.yaml -f docker-compose.override.yaml -f docker-compose.multichat.yaml up --build
+#
+# --env-file hace falta porque chat-service-2 está definido acá y toma las
+# variables de la voz del .env de chat-and-real-time.
 #
 # Agrega una segunda réplica de chat (`chat-service-2`) y un segundo gateway
 # (`api-gateway-2`, puerto 8082) fijado a esa réplica. Así cada cliente queda
@@ -28,17 +31,14 @@ services:
       LOG_LEVEL: info
       SERVICE_NAME: chat
       RABBITMQ_URL: amqp://rabbitmq:5672/
-      # Mismo LiveKit que chat-service (ver su compose): las dos réplicas
-      # firman tokens para el mismo servidor de voz.
-      LIVEKIT_URL: ws://localhost:7880
-      LIVEKIT_API_URL: http://livekit:7880
-      LIVEKIT_API_KEY: devkey
-      LIVEKIT_API_SECRET: secret
+      # Mismo LiveKit que chat-service, del .env de chat-and-real-time (por
+      # --env-file): las dos réplicas firman tokens para el mismo servidor de voz.
+      LIVEKIT_URL: ${LIVEKIT_URL:?falta LIVEKIT_URL en el .env de chat-and-real-time (ver su .env.example)}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?falta LIVEKIT_API_KEY en el .env de chat-and-real-time (ver su .env.example)}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?falta LIVEKIT_API_SECRET en el .env de chat-and-real-time (ver su .env.example)}
     depends_on:
       chat-mongo:
         condition: service_healthy
-      livekit:
-        condition: service_started
     restart: unless-stopped
     networks:
       - red-local
