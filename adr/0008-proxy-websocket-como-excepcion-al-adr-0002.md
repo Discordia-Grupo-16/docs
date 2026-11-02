@@ -1,7 +1,7 @@
 # ADR-0008: Proxy WebSocket del gateway hacia `chat` como excepción al ADR-0002
 
 - **Estado:** Aceptado
-- **Fecha:** 2026-09-16
+- **Fecha:** 2026-10-04
 - **Decisores:** Felipe Abad Mustillo (propone, dueño de `chat` en el sprint 1)
 - **Servicios afectados:** `api-gateway`, `chat-and-real-time`
 
