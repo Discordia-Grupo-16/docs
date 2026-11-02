@@ -114,6 +114,7 @@ La consigna pide justificar cada comunicación sincrónica. Las 19 operaciones H
 | `POST /api/v1/servers` | sí — `201` con el servidor creado | `community.server.created` | `metrics` |
 | `GET /api/v1/servers/{serverId}` | sí — lectura, `403` si no es miembro | — | |
 | `DELETE /api/v1/servers/{serverId}/members/me` | sí — `204` | `community.member.left` | `chat`, `metrics` |
+| `PUT /api/v1/servers/{serverId}/bans/{userId}` | sí — `204`, idempotente | `community.member.left` | `chat`, `metrics` |
 | `POST /api/v1/servers/{serverId}/invites` | sí — `201` con el código | — ¹ | |
 | `DELETE /api/v1/servers/{serverId}/invites/{inviteId}` | sí — `204` | — ¹ | |
 | `GET /api/v1/invites/{code}` | sí — lectura previa a unirse | — | |
