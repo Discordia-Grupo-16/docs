@@ -40,9 +40,11 @@ repo: el alcance acordado no los incluye (los roles y baneos viven en `community
 
 - **Sin commits directos a `develop` ni a `main`.** Hoy se cumple por proceso, no por
   configuración (ver [Branch protection](#branch-protection)).
-- `develop` → `main` solo en los checkpoints, con un tag `vX.Y.>`: `0.1.0`
-  para el CP1 se mantiene y `v0.2.0` para el CP2. Un fix posterior sube la última cifra. `discordia-ci`
-  conserva `v1`, que es lo que referencian los workflows de los otros repos.
+- `develop` → `main` solo en los checkpoints, con un tag anotado `vX.Y.Z`: `0.1.0`
+  para el CP1 se mantiene, `v0.2.0` para el CP2 y `v0.3.0` para el CP3. Un fix posterior sube la
+  última cifra. Antes de un checkpoint se taggea `develop` con un `rc` (`v0.3.0-rc.1`), que también
+  dispara el CD de AWS porque empieza con `v`. `discordia-ci` conserva `v1`, que es lo que
+  referencian los workflows de los otros repos.
 - Las ramas de trabajo salen siempre de `develop` y se borran después del merge.
 
 Tipos: `feat/` funcionalidad nueva · `fix/` corrección · `chore/` infraestructura, build,
