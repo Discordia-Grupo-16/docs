@@ -159,7 +159,8 @@ git config blame.ignoreRevsFile .git-blame-ignore-revs
 
 ## Secretos
 
-El detalle está en ADR-0007. Lo operativo:
+La decisión está en ADR-0015, que reemplazó al ADR-0007: en AWS, los secretos van en SSM. Lo
+operativo:
 
 - `.env` en `.gitignore`, junto con `*.pem`, `*.key`, `*credentials*.json`,
   `coverage.xml`, `.coverage`, `.ruff_cache/`.
@@ -181,4 +182,4 @@ Secretos commiteados son red line de la consigna: bloquean la evaluación del pr
 - [Contrato de repositorio para el CI](../ci/contrato-ci.md) — el layout que cada repo debe
   cumplir para que el pipeline compartido funcione
 - ADR-0006 — proveedor cloud y CI/CD (pendiente: dice `master`, va `main`)
-- ADR-0007 — gestión de secretos
+- ADR-0015 — gestión de secretos y configuración (reemplaza al ADR-0007)
