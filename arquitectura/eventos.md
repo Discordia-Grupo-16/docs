@@ -108,6 +108,8 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 | `community.member.joined` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ serverId, userId }` ¹ | SCRUM-137; ADR-0017 |
 | `community.member.left` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, userId, reason }` ¹ ³ | SCRUM-137, SCRUM-68, SCRUM-69; ADR-0017 |
 | `community.member.permissions-changed` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61; ADR-0017 |
+| `community.server.ownership-transferred` | `community` | `chat` (avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ serverId, previousOwnerId, newOwnerId }` ⁸ | SCRUM-35; ADR-0017 |
+| `community.server.ownership-transfer-changed` | `community` | `chat` (avisos de UI, cola por instancia ⁷) | `{ serverId, toUserId }` ⁸ | SCRUM-35; ADR-0017 |
 | `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId }` | SCRUM-41 |
 | `chat.membership.changed` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ serverId, userId }` ² | SCRUM-146 |
 | `identity.user.suspended` | `identity` | `chat` (cierre de sockets, cola por instancia), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ userId, suspendedBy }` ⁵ | SCRUM-81 |
@@ -173,6 +175,11 @@ Y las que agrega `channelOverrides` (ADR-0012):
 - **Idempotencia:** igual que `profile-updated` (nota ⁶), un duplicado o un evento fuera de orden repite un aviso que provoca una relectura. No hay `lastEventAt` que mantener.
 - **Los payloads de esta fila salen de lo que `community` publica hoy.** `server.created` lleva `{ serverId, name, ownerId }`, y `channel.updated` y `channel.deleted` llevan `serverId`, que el catálogo no listaba y que el consumidor necesita para saber a quiénes avisar. Un consumidor que no use el campo lo ignora.
 - **Requisito para los productores:** el evento se publica **después del commit**. Si no, el cliente relee antes de que el dato exista.
+
+⁸ **Transferencia de propiedad** (SCRUM-35, D6). Los dos se publican **después del commit**.
+   - **`ownership-transferred`** se publica al aceptarse la transferencia, cuando el owner ya cambió. `previousOwnerId` es el owner anterior y `newOwnerId`, el nuevo. Va junto con `community.member.permissions-changed` para los dos usuarios, porque el owner tiene todos los permisos por serlo y no por un rol ([ADR-0011](../adr/0011-roles-y-permisos-en-community.md)).
+   - **`ownership-transfer-changed`** avisa que cambió la transferencia pendiente de `toUserId` en ese servidor: se creó, el owner la canceló, el destinatario la rechazó, o se canceló sola porque el destinatario dejó de ser miembro. No dice cuál de las cuatro, porque el cliente vuelve a pedir `GET /users/me/ownership-transfers`, que es la fuente. Al aceptarse no se publica: la acción la hizo el destinatario, y `ownership-transferred` ya avisa al resto del servidor.
+   - **Idempotencia:** igual que los avisos de la nota ⁷, un duplicado o un evento fuera de orden repite un aviso que provoca una relectura.
 
 ## Nota sobre los dos lenguajes
 

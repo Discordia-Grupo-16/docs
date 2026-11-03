@@ -122,6 +122,240 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /servers/{serverId}/ownership-transfer:
+    get:
+      summary: Ver la transferencia de propiedad pendiente del servidor
+      description: >
+        SCRUM-35. Es lo que le permite al owner ver a quién le propuso la
+        propiedad y cancelarla. Solo lo ve el owner: el destinatario ve las
+        suyas con `GET /users/me/ownership-transfers`.
+      operationId: getOwnershipTransfer
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: La transferencia pendiente.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OwnershipTransfer'
+        '403':
+          description: Quien pide no es el owner del servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor inexistente, o no hay ninguna transferencia pendiente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Proponer la propiedad del servidor a otro miembro
+      description: >
+        Primer paso de "Transferir propiedad del servidor" (SCRUM-35, D6).
+        Crea una transferencia **pendiente**: la propiedad no cambia hasta
+        que el destinatario la acepte (CA1) y no cambia si la rechaza (CA3).
+        Hay una sola pendiente por servidor; para proponérsela a otro, el
+        owner cancela la actual primero.
+
+
+        La pendiente se cancela sola, en la misma transacción, si el
+        destinatario deja de ser miembro (abandona, lo expulsan o lo banean),
+        así que nunca queda una transferencia hacia alguien que no es miembro
+        (CA2). Si el servidor se elimina, se borra con él.
+
+
+        Publica `community.server.ownership-transfer-changed` para que al
+        destinatario le llegue el aviso al instante (ver
+        `arquitectura/eventos.md`).
+      operationId: createOwnershipTransfer
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOwnershipTransferRequest'
+      responses:
+        '201':
+          description: La transferencia quedó pendiente de la respuesta del destinatario.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OwnershipTransfer'
+        '403':
+          description: Quien pide no es el owner del servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Ya hay una transferencia pendiente en este servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: >
+            `to_user_id` no es miembro del servidor (CA2), es el propio owner,
+            o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Cancelar la transferencia de propiedad pendiente
+      description: >
+        SCRUM-35 (D6). La cancela el owner. Es idempotente: si no hay nada
+        pendiente responde `204` igual, porque el resultado que se pide (que
+        no haya transferencia) ya se cumple. Publica
+        `community.server.ownership-transfer-changed` solo si había una.
+      operationId: cancelOwnershipTransfer
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '204':
+          description: No queda ninguna transferencia pendiente.
+        '403':
+          description: Quien pide no es el owner del servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /servers/{serverId}/ownership-transfer/acceptance:
+    post:
+      summary: Aceptar la propiedad del servidor
+      description: >
+        CA1 de "Transferir propiedad del servidor" (SCRUM-35). Lo hace el
+        destinatario. En una sola transacción, el destinatario pasa a ser el
+        owner y la pendiente se borra. El owner anterior queda como miembro
+        regular, con los roles que ya tenía: los permisos de owner salen de
+        serlo y no de un rol (ADR-0011), así que los pierde sin tocar ninguna
+        asignación.
+
+
+        Publica `community.server.ownership-transferred` y
+        `community.member.permissions-changed` con los permisos de los dos.
+
+
+        Es idempotente: si no hay nada pendiente y quien pide ya es el owner,
+        responde `204`, así un reintento después de aceptar no falla. Si la
+        pendiente es para otro usuario responde `403`, por ejemplo cuando el
+        owner canceló y se la propuso a otra persona mientras el destinatario
+        tenía el aviso abierto: el cliente vuelve a pedir
+        `GET /users/me/ownership-transfers`.
+      operationId: acceptOwnershipTransfer
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '204':
+          description: Quien pide es el owner del servidor (CA1).
+        '403':
+          description: La transferencia pendiente es para otro usuario.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: >
+            Servidor inexistente, o no hay ninguna transferencia pendiente y
+            quien pide no es el owner.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /servers/{serverId}/ownership-transfer/rejection:
+    post:
+      summary: Rechazar la propiedad del servidor
+      description: >
+        CA3 de "Transferir propiedad del servidor" (SCRUM-35). Lo hace el
+        destinatario. La pendiente se borra y la propiedad no cambia. Publica
+        `community.server.ownership-transfer-changed`.
+
+
+        Es idempotente: si no hay nada pendiente responde `204`, porque el
+        resultado que se pide (que la propiedad no cambie) ya se cumple. Si
+        la pendiente es para otro usuario responde `403`.
+      operationId: rejectOwnershipTransfer
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '204':
+          description: No queda ninguna transferencia pendiente para quien pide (CA3).
+        '403':
+          description: La transferencia pendiente es para otro usuario.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/ownership-transfers:
+    get:
+      summary: Listar las transferencias de propiedad que esperan mi respuesta
+      description: >
+        SCRUM-35 (D6). Las pendientes en las que quien pide es el
+        destinatario, una por servidor como mucho. El cliente las muestra
+        como un aviso en la app, porque no hay centro de notificaciones, y
+        las vuelve a pedir cuando le llega el aviso
+        `ownershipTransfers` (ADR-0017).
+
+
+        Cuelga de `/users/me` pero lo atiende `community`: el gateway lo
+        enruta por su path completo, que es más específico que
+        `/api/v1/users/me` de `identity`.
+      operationId: listMyOwnershipTransfers
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+      responses:
+        '200':
+          description: Las transferencias pendientes para quien pide; lista vacía si no hay.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OwnershipTransfer'
+
   /servers/{serverId}/members/:
     get:
       summary: Listar los miembros del servidor con los roles de cada uno
@@ -1365,6 +1599,42 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Permission'
+
+    OwnershipTransfer:
+      description: >
+        Una transferencia de propiedad pendiente (SCRUM-35, D6). Hay como
+        mucho una por servidor, y deja de existir al aceptarse, rechazarse o
+        cancelarse. Sin nombres ni avatares de los usuarios, que son de
+        `identity`; sí con el nombre del servidor, para que el destinatario
+        pueda mostrar el aviso sin pedirlo aparte.
+      type: object
+      required: [server_id, server_name, from_user_id, to_user_id, created_at]
+      properties:
+        server_id:
+          type: string
+          format: uuid
+        server_name:
+          type: string
+        from_user_id:
+          type: string
+          format: uuid
+          description: El owner que la propuso.
+        to_user_id:
+          type: string
+          format: uuid
+          description: El miembro que tiene que aceptarla o rechazarla.
+        created_at:
+          type: string
+          format: date-time
+
+    CreateOwnershipTransferRequest:
+      type: object
+      required: [to_user_id]
+      properties:
+        to_user_id:
+          type: string
+          format: uuid
+          description: Un miembro del servidor que no sea el owner (CA2).
 
     ServerMember:
       description: >
