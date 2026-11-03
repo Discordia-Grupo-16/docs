@@ -14,7 +14,9 @@ info:
     - /api/v1/users*, /api/v1/sessions*, /api/v1/password-resets* → identity
     - /api/v1/servers*, /api/v1/invites* → community
     - /api/v1/channels/{channelId}/messages, /api/v1/channels/{channelId}/ws,
-      /api/v1/channels/{channelId}/voice-tokens → chat-y-real-time
+      /api/v1/channels/{channelId}/voice-tokens,
+      /api/v1/channels/{channelId}/read, /api/v1/users/me/unread,
+      /api/v1/users/me/read-all → chat-y-real-time
     - /api/v1/admin/users* → identity (backoffice, solo staff)
     - /api/v1/password-resets* → identity (públicas, sin JWT)
     - /api/v1/ws-ticket → lo atiende el propio gateway (sin upstream)
@@ -1330,6 +1332,103 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/users/me/unread:
+    get:
+      summary: '[proxy → chat-y-real-time] Estado de no leídos del usuario'
+      description: >
+        Va a `chat`, no a `identity`, aunque cuelgue de `/users/me`: el
+        gateway enruta por path completo y estos dos literales son más
+        específicos que `/api/v1/users/me`.
+      operationId: gatewayGetUnread
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ver chat.yaml → GET /users/me/unread
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'chat.yaml#/components/schemas/ChannelUnread'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/users/me/read-all:
+    put:
+      summary: '[proxy → chat-y-real-time] Marcar todos los canales como leídos'
+      operationId: gatewayMarkAllRead
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ver chat.yaml → PUT /users/me/read-all
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'chat.yaml#/components/schemas/ReadState'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/channels/{channelId}/read:
+    put:
+      summary: '[proxy → chat-y-real-time] Marcar un canal como leído'
+      operationId: gatewayMarkChannelRead
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messageId]
+              properties:
+                messageId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Ver chat.yaml → PUT /channels/{channelId}/read
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'chat.yaml#/components/schemas/ReadState'
+        '400':
+          description: Ver chat.yaml → body inválido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 
 components:
   securitySchemes:
