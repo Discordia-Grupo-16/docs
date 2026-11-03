@@ -132,6 +132,11 @@ paths:
           el staff (`identity.user.suspended`). El cliente no reconecta,
           descarta los tokens y lleva al login con el aviso de cuenta
           suspendida.
+
+
+        Frames que `chat` envía por esta conexión además de los mensajes:
+        `VoiceParticipantsUpdatedFrame` (`voice-participants.updated`,
+        SCRUM-54), cuando cambia quién está conectado a un canal de voz.
       operationId: channelWebSocket
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -224,8 +229,126 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /webhooks/livekit:
+    post:
+      summary: Recibir los avisos de LiveKit sobre las salas de voz
+      description: >
+        SCRUM-54. Lo llama LiveKit, no un cliente: no lleva `X-User-Id`. Se
+        autentica por firma, no por JWT de sesión: el header `Authorization`
+        trae el JWT que LiveKit firma con el secret de `LIVEKIT_API_SECRET`
+        (sin el prefijo `Bearer`) e incluye el sha256 del body, así que
+        prueba que el aviso lo mandó LiveKit y que nadie tocó el cuerpo. Por
+        eso nada entre LiveKit y `chat` puede modificar el body.
+
+
+        El webhook solo dispara: ante `participant_joined`,
+        `participant_left`, `participant_connection_aborted` o
+        `room_finished`, `chat` no aplica el evento sino que relee la sala
+        entera con `ListParticipants` y guarda esa foto, de modo que un aviso
+        perdido o repetido se corrige con el siguiente. Cualquier otro
+        evento (`track_*`, `room_started`, etc.) se responde `200` sin
+        hacer nada, igual que el de una sala que no es un canal de voz
+        conocido.
+
+
+        Si la relectura, el guardado o la publicación de
+        `chat.voice.participants-changed` fallan, responde `500` para que
+        LiveKit reintente. Solo existe si la voz está configurada en el
+        entorno.
+      operationId: receiveLiveKitWebhook
+      security:
+        - livekitSignature: []
+      requestBody:
+        required: true
+        content:
+          application/webhook+json:
+            schema:
+              $ref: '#/components/schemas/LiveKitWebhookEvent'
+      responses:
+        '200':
+          description: Aviso procesado, o ignorado porque no interesa.
+        '401':
+          description: Falta el header `Authorization`, o la firma no es válida o no coincide con el body.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Falló LiveKit, la base o la publicación al bus. LiveKit reintenta.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /servers/{serverId}/voice-participants:
+    get:
+      summary: Listar quién está conectado a los canales de voz de un servidor
+      description: >
+        SCRUM-54. Foto inicial al abrir un servidor, y relectura al
+        reconectar el WebSocket o volver a la app (ADR-0017): los frames que
+        se perdieron con el socket caído no se reenvían. Valida contra la
+        proyección local que el usuario sea miembro activo del servidor con
+        `VIEW_CHANNEL` (403 si no). Devuelve solo las salas que tienen gente;
+        un canal ausente de la lista está vacío. Si la voz no está
+        configurada en el entorno responde `200` con `data: []`. Cada sala
+        trae su `syncedAt`, con el que el cliente descarta fotos más viejas
+        que la que ya tiene.
+      operationId: getServerVoiceParticipants
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Salas del servidor con al menos un participante.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VoiceRoomParticipants'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: El usuario no es miembro activo del servidor, o le falta `VIEW_CHANNEL`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
+  securitySchemes:
+    livekitSignature:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: >
+        JWT firmado por LiveKit con el secret de `LIVEKIT_API_SECRET`, sin
+        prefijo `Bearer`, con el sha256 del body. Lo valida `chat`; es la
+        única autenticación de `POST /webhooks/livekit`.
+
   parameters:
+    ServerId:
+      in: path
+      name: serverId
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Debe referenciar un Server existente en `community`.
     XUserId:
       in: header
       name: X-User-Id
@@ -342,6 +465,99 @@ components:
         - suspended
         - permissions_revoked
         - channel_deleted
+
+    VoiceParticipant:
+      type: object
+      description: Un usuario conectado a la sala de voz de un canal.
+      required: [userId, joinedAt]
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: >
+            Referencia a User.id en `identity`. Es la identidad del
+            participante en LiveKit. El cliente resuelve nombre y avatar vía
+            `identity`. No incluye mute ni "está hablando": son estados de la
+            llamada y se ven estando adentro.
+        joinedAt:
+          type: string
+          format: date-time
+          description: Momento en que el participante se unió a la sala, según LiveKit, en UTC.
+
+    VoiceRoomParticipants:
+      type: object
+      description: Quién está conectado a la sala de voz de un canal, según la última foto que `chat` guardó.
+      required: [channelId, participants, syncedAt]
+      properties:
+        channelId:
+          type: string
+          format: uuid
+          description: Canal de voz; es igual al nombre de la sala de LiveKit.
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoiceParticipant'
+          description: Ordenados por `joinedAt`.
+        syncedAt:
+          type: string
+          format: date-time
+          description: >
+            Hora, en UTC, tomada **antes** de leer la sala a LiveKit. El
+            cliente aplica una foto solo si su `syncedAt` es mayor que el que
+            ya tiene para ese canal.
+
+    VoiceParticipantsUpdatedFrame:
+      type: object
+      description: >
+        Frame (SCRUM-54, ADR-0017) que `chat` envía por el WebSocket de chat
+        (`/channels/{channelId}/ws`) cuando cambia quién está conectado a un
+        canal de voz. Se entrega con `Broadcast(serverId)` a las conexiones
+        suscriptas a ese servidor (ADR-0011), y lleva la lista completa y no
+        un delta. Un `participants` vacío significa que el canal quedó vacío.
+        Nace del evento `chat.voice.participants-changed`.
+      required: [type, serverId, channelId, participants, syncedAt]
+      properties:
+        type:
+          type: string
+          enum: [voice-participants.updated]
+        serverId:
+          type: string
+          format: uuid
+        channelId:
+          type: string
+          format: uuid
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoiceParticipant'
+        syncedAt:
+          type: string
+          format: date-time
+          description: Misma regla que en `VoiceRoomParticipants`.
+
+    LiveKitWebhookEvent:
+      type: object
+      description: >
+        Aviso de LiveKit (solo los campos que `chat` lee; el resto se
+        ignora). `chat` no usa el contenido para saber quién está en la sala:
+        solo el nombre de la sala y el tipo de evento.
+      required: [event]
+      properties:
+        id:
+          type: string
+          description: Id del aviso; `chat` lo loguea.
+        event:
+          type: string
+          description: >
+            Tipo de evento. Disparan la relectura de la sala:
+            `participant_joined`, `participant_left`,
+            `participant_connection_aborted` y `room_finished`.
+        room:
+          type: object
+          properties:
+            name:
+              type: string
+              description: Nombre de la sala; es igual al `channelId`.
 
     ErrorResponse:
       type: object
