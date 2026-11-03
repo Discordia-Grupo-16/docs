@@ -69,6 +69,68 @@ paths:
           $ref: '#/components/responses/UnprocessableEntity'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    get:
+      summary: '[proxy → identity] Ver perfiles públicos por lote'
+      operationId: gatewayGetPublicUsers
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: ids
+          required: true
+          description: UUID separados por coma, entre 1 y 100.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ver identity.yaml → GET /users
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'identity.yaml#/components/schemas/PublicUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/v1/users/{userId}:
+    get:
+      summary: '[proxy → identity] Ver el perfil público de un usuario'
+      operationId: gatewayGetPublicUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ver identity.yaml → GET /users/{userId}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'identity.yaml#/components/schemas/PublicUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: El usuario no existe o su cuenta está suspendida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/sessions:
     post:
@@ -489,6 +551,36 @@ paths:
           $ref: '#/components/responses/UnprocessableEntity'
         '401':
           $ref: '#/components/responses/Unauthorized'
+    get:
+      summary: '[proxy → community] Listar los servidores del usuario'
+      operationId: gatewayListServers
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: withUser
+          required: false
+          description: Id del usuario con el que se comparten los servidores.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ver community.yaml → GET /servers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'community.yaml#/components/schemas/Server'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
 
   /api/v1/servers/{serverId}:
     get:
