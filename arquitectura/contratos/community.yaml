@@ -1131,6 +1131,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DetailError'
+    delete:
+      summary: Eliminar un rol
+      description: >
+        CA1 y CA2 de "Eliminar rol" (SCRUM-64), y CA2 de "Definir rol por
+        defecto" (SCRUM-63).
+
+
+        Borra el rol y sus asignaciones, así que quienes lo tenían dejan de
+        contar con los permisos que daba (CA1). Publica
+        `community.member.permissions-changed` con los permisos ya resueltos
+        de esos miembros, si había alguno (D7). La lista de roles no tiene
+        evento (ADR-0017): los demás clientes la ven con el respaldo de 60 s.
+
+
+        Las posiciones de los demás roles no cambian. Queda un hueco, y no
+        importa: la jerarquía solo compara posiciones.
+
+
+        El orden de los chequeos define qué código llega: `MANAGE_ROLES`
+        (403), rol inexistente (404), jerarquía (403), rol por defecto (409)
+        y por último quedarse sin `ADMINISTRATOR` (409).
+      operationId: deleteRole
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+      responses:
+        '204':
+          description: El rol se eliminó (CA1).
+        '403':
+          description: >
+            Quien pide no tiene `MANAGE_ROLES` (CA2), o el rol está en su misma
+            posición o por encima en la jerarquía (D7). El owner no pasa por la
+            jerarquía.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor o rol inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >
+            Dos motivos, cada uno con su mensaje:
+
+
+            1. Es el rol por defecto del servidor. Se puede eliminar después
+            de elegir otro con `PUT .../roles/{roleId}/default` (CA2 de
+            SCRUM-63).
+
+
+            2. Es la única fuente de `ADMINISTRATOR` de quien lo elimina: el
+            servidor quedaría sin nadie que pueda administrarlo. Es la misma
+            regla que el `409` de `PATCH`, y como ahí se mira el resultado
+            efectivo: si otro rol le sigue dando `ADMINISTRATOR`, se elimina.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /servers/{serverId}/roles/{roleId}/default:
     put:
