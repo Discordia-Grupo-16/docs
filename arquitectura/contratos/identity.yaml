@@ -732,9 +732,13 @@ paths:
     get:
       summary: Ver el perfil público de un usuario
       description: >
-        SCRUM-26. Requiere sesión. Devuelve únicamente campos públicos — nunca
-        email ni contraseña (RNF — Minimización de datos en APIs). Una cuenta
-        suspendida se trata como inexistente: responde `404`.
+        Historia optativa "Visualización de perfil público" (SCRUM-26). Lo usa
+        el cliente, a través del gateway, al tocar un autor o un miembro;
+        ningún servicio lo llama (el ADR-0004 fue rechazado). Requiere sesión.
+        Devuelve únicamente campos públicos — nunca email ni contraseña (RNF —
+        Minimización de datos en APIs). Los servidores en común no vienen
+        acá: están en `community` (`GET /servers?withUser=`) y el cliente
+        combina las dos respuestas.
       operationId: getUserPublicById
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -757,7 +761,16 @@ paths:
                   data:
                     $ref: '#/components/schemas/PublicUser'
         '404':
-          description: Usuario inexistente o con la cuenta suspendida.
+          description: >
+            Usuario inexistente o cuenta suspendida (CA3). Es la misma
+            respuesta en los dos casos, con `detail` "El perfil no está
+            disponible", para no revelar si la cuenta existe.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: "`userId` con formato de UUID inválido."
           content:
             application/problem+json:
               schema:
