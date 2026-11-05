@@ -1189,6 +1189,8 @@ paths:
             servidor quedaría sin nadie que pueda administrarlo. Es la misma
             regla que el `409` de `PATCH`, y como ahí se mira el resultado
             efectivo: si otro rol le sigue dando `ADMINISTRATOR`, se elimina.
+            El owner nunca llega a este caso: sus permisos salen de ser owner
+            y no de un rol.
           content:
             application/problem+json:
               schema:
