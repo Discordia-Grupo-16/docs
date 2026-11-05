@@ -37,7 +37,7 @@ Pipeline mínimo por repo de servicio:
 1. Lint
 2. Tests con reporte de cobertura — **falla el build si baja de 70%** (requisito de la consigna)
 3. Build de la imagen Docker
-4. Deploy a la nube solo desde `master`
+4. Deploy a la nube con los tags `vX.Y.Z` (ver [`git-workflow.md`](../procesos/git-workflow.md))
 
 Pipeline de este repo de documentación: opcionalmente un chequeo de links rotos. **No agregar CI que pueda romperse sin aportar valor** — la red line penaliza el CI roto.
 

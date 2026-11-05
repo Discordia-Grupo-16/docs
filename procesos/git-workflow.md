@@ -60,9 +60,6 @@ fix/SCRUM-112-permissions-nullable
 El número de Jira en el nombre hace que GitHub lo ponga solo en el título del PR y que la
 integración Jira↔GitHub linkee sin intervención manual.
 
-> **Corrige a ADR-0006**, que dice que el deploy sale de `master`. La rama de producción
-> se llama `main`. Hay que actualizar ese ADR.
-
 ## Commits
 
 Prefijo de tipo, dos puntos, y mensaje en minúscula.
@@ -181,5 +178,5 @@ Secretos commiteados son red line de la consigna: bloquean la evaluación del pr
 - [`definition-of-done.md`](definition-of-done.md)
 - [Contrato de repositorio para el CI](../ci/contrato-ci.md) — el layout que cada repo debe
   cumplir para que el pipeline compartido funcione
-- ADR-0006 — proveedor cloud y CI/CD (pendiente: dice `master`, va `main`)
+- ADR-0006 — proveedor cloud y CI/CD
 - ADR-0015 — gestión de secretos y configuración (reemplaza al ADR-0007)
