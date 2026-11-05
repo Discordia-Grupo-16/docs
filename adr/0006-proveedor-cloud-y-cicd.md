@@ -37,7 +37,7 @@ Pipeline mínimo por repo de servicio:
 1. Lint
 2. Tests con reporte de cobertura — **falla el build si baja de 70%** (requisito de la consigna)
 3. Build de la imagen Docker
-4. Deploy a la nube solo desde `master`
+4. Deploy a la nube con los tags `vX.Y.Z` (ver [`git-workflow.md`](../procesos/git-workflow.md))
 
 Pipeline de este repo de documentación: opcionalmente un chequeo de links rotos. **No agregar CI que pueda romperse sin aportar valor** — la red line penaliza el CI roto.
 
@@ -68,7 +68,7 @@ Dada la elección de AWS y la severa limitación presupuestaria inicial, debimos
 
 ## Referencias
 
-- [ADR-0003](0003-tecnologia-del-bus-pubsub.md), [ADR-0005](0005-tecnologia-del-canal-de-voz.md), [ADR-0007](0007-gestion-de-secretos.md)
+- [ADR-0003](0003-tecnologia-del-bus-pubsub.md), [ADR-0005](0005-tecnologia-del-canal-de-voz.md), [ADR-0015](0015-gestion-de-configuracion.md)
 - [ADR-0013](0013-reduccion-de-costos-en-red.md)
 - [ADR-0014](0014-despliegue-de-bases-de-datos.md)
 - [ADR-0015](0015-gestion-de-configuracion.md)
