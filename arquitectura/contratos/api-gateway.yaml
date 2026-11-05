@@ -641,10 +641,6 @@ paths:
   /api/v1/users/me/ownership-transfers:
     get:
       summary: '[proxy → community] Listar las transferencias de propiedad que esperan mi respuesta'
-      description: >
-        Va a `community`, no a `identity`, aunque cuelgue de `/users/me`: el
-        gateway enruta por path completo y este literal es más específico que
-        `/api/v1/users/me`.
       operationId: gatewayListMyOwnershipTransfers
       security:
         - bearerAuth: []

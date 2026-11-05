@@ -334,11 +334,6 @@ paths:
         como un aviso en la app, porque no hay centro de notificaciones, y
         las vuelve a pedir cuando le llega el aviso
         `ownershipTransfers` (ADR-0017).
-
-
-        Cuelga de `/users/me` pero lo atiende `community`: el gateway lo
-        enruta por su path completo, que es más específico que
-        `/api/v1/users/me` de `identity`.
       operationId: listMyOwnershipTransfers
       parameters:
         - $ref: '#/components/parameters/XUserId'
