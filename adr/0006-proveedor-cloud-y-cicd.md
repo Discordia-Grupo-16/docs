@@ -1,8 +1,8 @@
 # ADR-0006: Proveedor cloud y pipeline de CI/CD
 
-- **Estado:** Propuesto
-- **Fecha:** —
-- **Decisores:** _(a completar)_
+- **Estado:** Aceptado
+- **Fecha:** 2026-10-16
+- **Decisores:** Equipo de Infraestructura
 - **Servicios afectados:** todos
 
 ## Contexto
@@ -43,12 +43,32 @@ Pipeline de este repo de documentación: opcionalmente un chequeo de links rotos
 
 ## Decisión
 
-_(a completar — se puede decidir CI ahora y cloud después)_
+Elegimos **la Opción A (Un cloud grande - AWS)**.
+
+Decidimos alojar nuestra infraestructura en AWS porque nos permite alinearnos con lo que se utiliza habitualmente en la industria y nos brinda la posibilidad de utilizar los créditos educativos disponibles a nuestro favor.
 
 ## Consecuencias
 
-_(a completar)_
+**Positivas**
+
+- Contamos con una infraestructura profesional y capacidad de usar servicios gestionados de nivel empresarial.
+- Aprovechamos los créditos educativos para solventar los gastos de la nube.
+
+**Negativas / costo que aceptamos**
+
+- Asumimos una curva de aprendizaje compleja en materia de IAM, configuración de redes y permisos que nos restará tiempo de desarrollo en este sprint.
+- Asumimos el riesgo latente de incurrir en altos costos de facturación si los recursos quedan encendidos sin control.
+
+**Impacto y mitigación en decisiones posteriores**
+
+Dada la elección de AWS y la severa limitación presupuestaria inicial, debimos tomar decisiones arquitectónicas de contención de gastos asociadas a este entorno:
+- **Redes:** Para evitar el costo base mensual de un NAT Gateway, decidimos desplegar el clúster ECS en subredes públicas delegando la seguridad perimetral a reglas estrictas de Security Groups (ver [ADR-0013](0013-reduccion-de-costos-en-red.md)).
+- **Bases de Datos:** Para no pagar los altos costos de los servicios administrados de AWS (RDS, DocumentDB, ElastiCache, Amazon MQ), se optó por containerizar PostgreSQL, MongoDB, Redis y RabbitMQ directamente en ECS Fargate, asumiendo la pérdida de datos y estado ante reinicios de los contenedores (ver [ADR-0014](0014-despliegue-de-bases-de-datos.md)).
+- **Gestión de variables:** Adoptamos un enfoque híbrido combinando AWS Systems Manager (Parameter Store) para los secretos sensibles y un archivo `.env` alojado en S3 para las configuraciones operativas, equilibrando así la seguridad con la agilidad (ver [ADR-0015](0015-gestion-de-configuracion.md)).
 
 ## Referencias
 
 - [ADR-0003](0003-tecnologia-del-bus-pubsub.md), [ADR-0005](0005-tecnologia-del-canal-de-voz.md), [ADR-0007](0007-gestion-de-secretos.md)
+- [ADR-0013](0013-reduccion-de-costos-en-red.md)
+- [ADR-0014](0014-despliegue-de-bases-de-datos.md)
+- [ADR-0015](0015-gestion-de-configuracion.md)

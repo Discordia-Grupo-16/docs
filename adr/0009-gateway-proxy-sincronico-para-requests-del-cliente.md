@@ -114,6 +114,7 @@ La consigna pide justificar cada comunicación sincrónica. Las 19 operaciones H
 | `POST /api/v1/servers` | sí — `201` con el servidor creado | `community.server.created` | `metrics` |
 | `GET /api/v1/servers/{serverId}` | sí — lectura, `403` si no es miembro | — | |
 | `DELETE /api/v1/servers/{serverId}/members/me` | sí — `204` | `community.member.left` | `chat`, `metrics` |
+| `PUT /api/v1/servers/{serverId}/bans/{userId}` | sí — `204`, idempotente | `community.member.left` | `chat`, `metrics` |
 | `POST /api/v1/servers/{serverId}/invites` | sí — `201` con el código | — ¹ | |
 | `DELETE /api/v1/servers/{serverId}/invites/{inviteId}` | sí — `204` | — ¹ | |
 | `GET /api/v1/invites/{code}` | sí — lectura previa a unirse | — | |
@@ -123,6 +124,7 @@ La consigna pide justificar cada comunicación sincrónica. Las 19 operaciones H
 | `PATCH /api/v1/servers/{serverId}/channels/{channelId}` | sí — `200` con el canal | `community.channel.updated` | `chat`, `metrics` |
 | `DELETE /api/v1/servers/{serverId}/channels/{channelId}` | sí — `204` | `community.channel.deleted` | `chat`, `metrics` |
 | `GET /api/v1/channels/{channelId}/messages` | sí — lectura del historial | — | |
+| `POST /api/v1/channels/{channelId}/voice-tokens` | sí — `200` con el token; `403`, `404` y `422` se deciden contra la proyección de `chat` | — | |
 | `GET /api/v1/channels/{channelId}/ws` | no aplica — transporte de larga duración, [ADR-0008](0008-proxy-websocket-como-excepcion-al-adr-0002.md) | `chat.message.sent` | `chat` (fan-out), `metrics` |
 
 ¹ No hay evento catalogado hoy en [`arquitectura/eventos.md`](../arquitectura/eventos.md). Si una historia futura necesita enterarse, se agrega a esa tabla en el mismo PR que lo implementa; no se publica nada que no esté catalogado.
