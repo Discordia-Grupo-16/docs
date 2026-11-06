@@ -177,7 +177,9 @@ paths:
         destinatario deja de ser miembro (abandona, lo expulsan o lo banean),
         así que nunca queda una transferencia pendiente hacia alguien que no
         es miembro (CA2). Si el servidor se elimina, sus transferencias se
-        borran con él.
+        borran con él, y si había una pendiente se publica
+        `community.server.ownership-transfer-changed` para que el aviso
+        desaparezca al instante.
 
 
         Publica `community.server.ownership-transfer-changed` para que al
@@ -269,8 +271,10 @@ paths:
         asignación.
 
 
-        Publica `community.server.ownership-transferred` y
-        `community.member.permissions-changed` con los permisos de los dos.
+        Publica `community.server.ownership-transferred`,
+        `community.server.ownership-transfer-changed` (para las otras
+        sesiones del destinatario) y `community.member.permissions-changed`
+        con los permisos de los dos.
 
 
         Es idempotente: si no hay nada pendiente y quien pide ya es el owner,
