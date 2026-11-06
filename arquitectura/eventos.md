@@ -170,16 +170,16 @@ Y las que agrega `channelOverrides` (ADR-0012):
 
 ⁷ Avisos de UI ([ADR-0017](../adr/0017-eventos-de-ui-por-el-websocket.md), SCRUM-167). Cada instancia de `chat` traduce estos eventos a un frame `invalidate` para sus clientes conectados, que vuelven a pedir por HTTP lo que quedó viejo. El frame no lleva datos de `community` ni de `identity`, y la tabla de qué evento genera qué aviso está en el ADR.
 
-⁸ **Estado de lectura** (SCRUM-75 y SCRUM-76). Es un relevo interno de `chat`, como el de la nota ², pero con datos: el estado de lectura es de `chat` y no de otro servicio, así que el frame que llega al cliente (`read-state.updated`) lleva el contenido y no es un `invalidate` (regla del [ADR-0017](../adr/0017-eventos-de-ui-por-el-websocket.md): se invalida solo lo que es de otro servicio). Lo publica la instancia que aplicó un `PUT /channels/{channelId}/read` o un `PUT /users/me/read-all` **solo si cambió algo**, y cada instancia lo entrega a las conexiones de `userId` que tiene abiertas. `states` trae un elemento por canal que avanzó (uno en el `PUT` de un canal, todos los que cambiaron en el de "marcar todo").
-   - **Idempotencia y orden:** el estado de un canal solo avanza. Se ordena por `(createdAt, messageId)` del mensaje, la misma tupla que usa el historial, así que un evento repetido o fuera de orden no retrocede nada: el cliente aplica `lastReadMessageId` solo si es posterior al que ya tiene.
-   - **Qué no publica:** el avance de lectura del autor al enviar un mensaje. Sus otras sesiones ya reciben el `message.created` con su propio `authorId` y lo deducen solas.
-   - **Menciones:** el `GET` de no leídos devuelve un `mentionCount` por canal que vale siempre `0` hasta que exista la optativa "Menciones". El evento no lo lleva.
-
 - **Cola por instancia, y propia.** Cada instancia tiene sus propias conexiones, así que todas tienen que ver cada evento: con una cola compartida lo recibiría una sola. Va aparte de la cola de la proyección (que sí es compartida, porque escribe en un Mongo único) y de la de mensajes, para que una lectura lenta no demore los broadcasts. Como RabbitMQ le entrega una copia a cada cola bindeada, que esta cola exista no le saca nada a la proyección.
 - **No escribe en Mongo.** Solo `identity.user.profile-updated` lee la proyección, para saber los servidores del usuario.
 - **Idempotencia:** igual que `profile-updated` (nota ⁶), un duplicado o un evento fuera de orden repite un aviso que provoca una relectura. No hay `lastEventAt` que mantener.
 - **Los payloads de esta fila salen de lo que `community` publica hoy.** `server.created` lleva `{ serverId, name, ownerId }`, y `channel.updated` y `channel.deleted` llevan `serverId`, que el catálogo no listaba y que el consumidor necesita para saber a quiénes avisar. Un consumidor que no use el campo lo ignora.
 - **Requisito para los productores:** el evento se publica **después del commit**. Si no, el cliente relee antes de que el dato exista.
+
+⁸ **Estado de lectura** (SCRUM-75 y SCRUM-76). Es un relevo interno de `chat`, como el de la nota ², pero con datos: el estado de lectura es de `chat` y no de otro servicio, así que el frame que llega al cliente (`read-state.updated`) lleva el contenido y no es un `invalidate` (regla del [ADR-0017](../adr/0017-eventos-de-ui-por-el-websocket.md): se invalida solo lo que es de otro servicio). Lo publica la instancia que aplicó un `PUT /channels/{channelId}/read` o un `PUT /users/me/read-all` **solo si cambió algo**, y cada instancia lo entrega a las conexiones de `userId` que tiene abiertas. `states` trae un elemento por canal que avanzó (uno en el `PUT` de un canal, todos los que cambiaron en el de "marcar todo").
+   - **Idempotencia y orden:** el estado de un canal solo avanza. Se ordena por `(createdAt, messageId)` del mensaje, la misma tupla que usa el historial, así que un evento repetido o fuera de orden no retrocede nada: el cliente aplica `lastReadMessageId` solo si es posterior al que ya tiene.
+   - **Qué no publica:** el avance de lectura del autor al enviar un mensaje. Sus otras sesiones ya reciben el `message.created` con su propio `authorId` y lo deducen solas.
+   - **Menciones:** el `GET` de no leídos devuelve un `mentionCount` por canal que vale siempre `0` hasta que exista la optativa "Menciones". El evento no lo lleva.
 
 ## Nota sobre los dos lenguajes
 
