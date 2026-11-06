@@ -128,7 +128,8 @@ paths:
       description: >
         SCRUM-35. Es lo que le permite al owner ver a quién le propuso la
         propiedad y cancelarla. Solo lo ve el owner: el destinatario ve las
-        suyas con `GET /users/me/ownership-transfers`.
+        suyas con `GET /users/me/ownership-transfers`. El cliente lo vuelve a
+        pedir cuando le llega el aviso `ownershipTransfers` (ADR-0017).
       operationId: getOwnershipTransfer
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -173,7 +174,7 @@ paths:
 
 
         Publica `community.server.ownership-transfer-changed` para que al
-        destinatario le llegue el aviso al instante (ver
+        destinatario y al owner les llegue el aviso al instante (ver
         `arquitectura/eventos.md`).
       operationId: createOwnershipTransfer
       parameters:

@@ -109,7 +109,7 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 | `community.member.left` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, userId, reason }` ¹ ³ | SCRUM-137, SCRUM-68, SCRUM-69; ADR-0017 |
 | `community.member.permissions-changed` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61, SCRUM-35, SCRUM-64; ADR-0017 |
 | `community.server.ownership-transferred` | `community` | `chat` (avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ serverId, previousOwnerId, newOwnerId }` ⁸ | SCRUM-35; ADR-0017 |
-| `community.server.ownership-transfer-changed` | `community` | `chat` (avisos de UI, cola por instancia ⁷) | `{ serverId, toUserId }` ⁸ | SCRUM-35; ADR-0017 |
+| `community.server.ownership-transfer-changed` | `community` | `chat` (avisos de UI, cola por instancia ⁷) | `{ serverId, fromUserId, toUserId }` ⁸ | SCRUM-35; ADR-0017 |
 | `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId }` | SCRUM-41 |
 | `chat.membership.changed` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ serverId, userId }` ² | SCRUM-146 |
 | `identity.user.suspended` | `identity` | `chat` (cierre de sockets, cola por instancia), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ userId, suspendedBy }` ⁵ | SCRUM-81 |
@@ -178,7 +178,7 @@ Y las que agrega `channelOverrides` (ADR-0012):
 
 ⁸ **Transferencia de propiedad** (SCRUM-35, D6). Los dos se publican **después del commit**.
    - **`ownership-transferred`** se publica al aceptarse la transferencia, cuando el owner ya cambió. `previousOwnerId` es el owner anterior y `newOwnerId`, el nuevo. Va junto con `community.member.permissions-changed` para los dos usuarios, porque el owner tiene todos los permisos por serlo y no por un rol ([ADR-0011](../adr/0011-roles-y-permisos-en-community.md)).
-   - **`ownership-transfer-changed`** avisa que cambió la transferencia pendiente de `toUserId` en ese servidor: se creó, el owner la canceló, el destinatario la rechazó, o se canceló sola porque el destinatario dejó de ser miembro. No dice cuál de las cuatro, porque el cliente vuelve a pedir `GET /users/me/ownership-transfers`, que es la fuente. Al aceptarse no se publica: la acción la hizo el destinatario, y `ownership-transferred` ya avisa al resto del servidor.
+   - **`ownership-transfer-changed`** avisa que cambió la transferencia pendiente del servidor: se creó, el owner la canceló, el destinatario la rechazó, o se canceló sola porque el destinatario dejó de ser miembro. Le llega a los dos involucrados: `toUserId`, el destinatario, y `fromUserId`, el owner que la propuso. No dice cuál de las cuatro, porque cada uno vuelve a pedir su fuente: el destinatario `GET /users/me/ownership-transfers` y el owner `GET /servers/{serverId}/ownership-transfer`. Al aceptarse no se publica: la acción la hizo el destinatario, y `ownership-transferred` ya avisa al resto del servidor.
    - **Idempotencia:** igual que los avisos de la nota ⁷, un duplicado o un evento fuera de orden repite un aviso que provoca una relectura.
 
 ## Nota sobre los dos lenguajes
