@@ -528,7 +528,7 @@ paths:
 
   /api/v1/servers/{serverId}/ownership-transfer:
     get:
-      summary: '[proxy → community] Ver la transferencia de propiedad pendiente'
+      summary: '[proxy → community] Ver la última transferencia de propiedad del servidor'
       operationId: gatewayGetOwnershipTransfer
       security:
         - bearerAuth: []
