@@ -14,9 +14,11 @@ info:
     el permiso efectivo es el OR de los roles, y `community` es el único que
     lo resuelve.
 
-    Siguen fuera de alcance Moderación, el resto de la épica Servidores
-    (transferir propiedad, administrar configuración) y los permisos por canal
-    del ADR-0012, que se agregan sin romper este contrato.
+    Del CP3 cubre Transferir propiedad del servidor (SCRUM-35) y Eliminar rol
+    (SCRUM-64).
+
+    Siguen fuera de alcance administrar la configuración del servidor y los
+    permisos por canal del ADR-0012, que se agregan sin romper este contrato.
 
 servers:
   - url: http://localhost:8002
