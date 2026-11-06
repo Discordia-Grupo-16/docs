@@ -40,9 +40,11 @@ repo: el alcance acordado no los incluye (los roles y baneos viven en `community
 
 - **Sin commits directos a `develop` ni a `main`.** Hoy se cumple por proceso, no por
   configuración (ver [Branch protection](#branch-protection)).
-- `develop` → `main` solo en los checkpoints, con un tag `vX.Y.>`: `0.1.0`
-  para el CP1 se mantiene y `v0.2.0` para el CP2. Un fix posterior sube la última cifra. `discordia-ci`
-  conserva `v1`, que es lo que referencian los workflows de los otros repos.
+- `develop` → `main` solo en los checkpoints, con un tag anotado `vX.Y.Z`: `0.1.0`
+  para el CP1 se mantiene, `v0.2.0` para el CP2 y `v0.3.0` para el CP3. Un fix posterior sube la
+  última cifra. Antes de un checkpoint se taggea `develop` con un `rc` (`v0.3.0-rc.1`), que también
+  dispara el CD de AWS porque empieza con `v`. `discordia-ci` conserva `v1`, que es lo que
+  referencian los workflows de los otros repos.
 - Las ramas de trabajo salen siempre de `develop` y se borran después del merge.
 
 Tipos: `feat/` funcionalidad nueva · `fix/` corrección · `chore/` infraestructura, build,
@@ -57,9 +59,6 @@ fix/SCRUM-112-permissions-nullable
 
 El número de Jira en el nombre hace que GitHub lo ponga solo en el título del PR y que la
 integración Jira↔GitHub linkee sin intervención manual.
-
-> **Corrige a ADR-0006**, que dice que el deploy sale de `master`. La rama de producción
-> se llama `main`. Hay que actualizar ese ADR.
 
 ## Commits
 
@@ -157,7 +156,8 @@ git config blame.ignoreRevsFile .git-blame-ignore-revs
 
 ## Secretos
 
-El detalle está en ADR-0007. Lo operativo:
+La decisión está en ADR-0015, que reemplazó al ADR-0007: en AWS, los secretos van en SSM. Lo
+operativo:
 
 - `.env` en `.gitignore`, junto con `*.pem`, `*.key`, `*credentials*.json`,
   `coverage.xml`, `.coverage`, `.ruff_cache/`.
@@ -178,5 +178,5 @@ Secretos commiteados son red line de la consigna: bloquean la evaluación del pr
 - [`definition-of-done.md`](definition-of-done.md)
 - [Contrato de repositorio para el CI](../ci/contrato-ci.md) — el layout que cada repo debe
   cumplir para que el pipeline compartido funcione
-- ADR-0006 — proveedor cloud y CI/CD (pendiente: dice `master`, va `main`)
-- ADR-0007 — gestión de secretos
+- ADR-0006 — proveedor cloud y CI/CD
+- ADR-0015 — gestión de secretos y configuración (reemplaza al ADR-0007)
