@@ -91,6 +91,7 @@ Sobre ese exchange hay dos formas de declarar una cola, y **no son intercambiabl
 - **Cola por instancia** para `identity.user.suspended`: los sockets del usuario suspendido pueden estar en cualquier instancia, así que todas tienen que enterarse para cerrar los suyos.
 - **Cola compartida** `chat.voice-access` para cortar las llamadas de voz de quien pierde el acceso (SCRUM-51): se bindea a `community.member.left`, `community.channel.deleted`, `community.member.permissions-changed` e `identity.user.suspended`. Es compartida porque sacar a alguien de una sala de LiveKit es una sola llamada al proveedor, que tiene que hacer una sola instancia. Solo corta sesiones de voz registradas **antes** del `occurredAt` del evento, así un evento atrasado no corta una unión nueva y un duplicado no encuentra nada que cortar.
 - **Cola por instancia** para `chat.membership.changed`, el relevo interno de membresías: la instancia que aplica un `member.joined` o `.left` a la proyección no sabe cuál tiene al usuario conectado, así que avisa a todas y cada una actualiza las suscripciones de sus propias conexiones.
+- **Cola por instancia** para `chat.read-state.updated` (SCRUM-76): la instancia que atiende el `PUT` de lectura no sabe en cuál está conectada la otra sesión del mismo usuario, así que avisa a todas y cada una empuja el frame a las conexiones de ese `userId` que tiene.
 
 **Riesgo a tener presente:** si `chat.message.sent` se declara por error como cola compartida, el mensaje le llega a una sola instancia — es decir, a una fracción de los usuarios conectados. No tira error, solo un cliente que nunca recibe nada, y es muy difícil de diagnosticar sin saber que la topología estaba mal desde el arranque. Por eso queda escrito acá y no solo en la cabeza de quien lo implementa.
 
@@ -110,6 +111,7 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 | `community.member.permissions-changed` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61; ADR-0017 |
 | `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId }` | SCRUM-41 |
 | `chat.membership.changed` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ serverId, userId }` ² | SCRUM-146 |
+| `chat.read-state.updated` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ userId, states: [{ channelId, serverId, lastReadMessageId, lastReadAt }] }` ⁸ | SCRUM-75, SCRUM-76 |
 | `identity.user.suspended` | `identity` | `chat` (cierre de sockets, cola por instancia), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ userId, suspendedBy }` ⁵ | SCRUM-81 |
 | `identity.user.reactivated` | `identity` | `metrics` (fan-out) | `{ userId, reactivatedBy }` ⁵ | SCRUM-82 |
 | `identity.user.profile-updated` | `identity` | `chat` (aviso a los clientes conectados, cola por instancia), `metrics` (fan-out) | `{ userId }` ⁶ | SCRUM-167 |
@@ -173,6 +175,11 @@ Y las que agrega `channelOverrides` (ADR-0012):
 - **Idempotencia:** igual que `profile-updated` (nota ⁶), un duplicado o un evento fuera de orden repite un aviso que provoca una relectura. No hay `lastEventAt` que mantener.
 - **Los payloads de esta fila salen de lo que `community` publica hoy.** `server.created` lleva `{ serverId, name, ownerId }`, y `channel.updated` y `channel.deleted` llevan `serverId`, que el catálogo no listaba y que el consumidor necesita para saber a quiénes avisar. Un consumidor que no use el campo lo ignora.
 - **Requisito para los productores:** el evento se publica **después del commit**. Si no, el cliente relee antes de que el dato exista.
+
+⁸ **Estado de lectura** (SCRUM-75 y SCRUM-76). Es un relevo interno de `chat`, como el de la nota ², pero con datos: el estado de lectura es de `chat` y no de otro servicio, así que el frame que llega al cliente (`read-state.updated`) lleva el contenido y no es un `invalidate` (regla del [ADR-0017](../adr/0017-eventos-de-ui-por-el-websocket.md): se invalida solo lo que es de otro servicio). Lo publica la instancia que aplicó un `PUT /channels/{channelId}/read` o un `PUT /users/me/read-all` **solo si cambió algo**, y cada instancia lo entrega a las conexiones de `userId` que tiene abiertas. `states` trae un elemento por canal que avanzó (uno en el `PUT` de un canal, todos los que cambiaron en el de "marcar todo").
+   - **Idempotencia y orden:** el estado de un canal solo avanza. Se ordena por `(createdAt, messageId)` del mensaje, la misma tupla que usa el historial, así que un evento repetido o fuera de orden no retrocede nada: el cliente aplica `lastReadMessageId` solo si es posterior al que ya tiene.
+   - **Qué no publica:** el avance de lectura del autor al enviar un mensaje. Sus otras sesiones ya reciben el `message.created` con su propio `authorId` y lo deducen solas.
+   - **Menciones:** el `GET` de no leídos devuelve un `mentionCount` por canal que vale siempre `0` hasta que exista la optativa "Menciones". El evento no lo lleva.
 
 ## Nota sobre los dos lenguajes
 
