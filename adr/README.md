@@ -24,6 +24,7 @@ Si agregás un ADR, agregá el renglón acá en el mismo PR.
 | [ADR-0014](0014-despliegue-de-bases-de-datos.md) | Despliegue de bases de datos stateful en ECS Fargate | Aceptado | 2026-10-16 |
 | [ADR-0015](0015-gestion-de-configuracion.md) | Gestión Híbrida de Secretos (SSM) y Configuraciones (S3) | Aceptado | 2026-10-16 |
 | [ADR-0017](0017-eventos-de-ui-por-el-websocket.md) | Eventos de UI por el WebSocket de `chat`, en lugar del polling del front | Aceptado | 2026-11-01 |
+| [ADR-0018](0018-recupero-segundo-factor-y-ticket-del-websocket.md) | Recupero de contraseña, segundo factor y ticket de un solo uso del WebSocket | Propuesto | 2026-11-07 |
 
 ## De servicio (referencia)
 
