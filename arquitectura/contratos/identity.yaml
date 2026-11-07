@@ -285,9 +285,19 @@ paths:
                     $ref: '#/components/schemas/MfaLoginResult'
         '401':
           description: >
-            Código incorrecto (CA3), `mfaToken` vencido, ya usado o agotado
-            por los 5 intentos. En todos los casos el mensaje es el mismo y el
-            cliente decide si vuelve al login por el `detail`.
+            Dos casos, que se distinguen por el `detail` (el `title` y el
+            `detail` van en español):
+
+            - Código incorrecto (CA3): `detail` "El código no es válido." El
+              `mfaToken` sigue vivo y el cliente deja reintentar, hasta 5
+              intentos en total.
+            - `mfaToken` vencido, ya usado, agotado por los 5 intentos, o 2FA
+              desactivado entre los dos pasos: `detail` "La verificación
+              venció. Volvé a iniciar sesión." El cliente vuelve al login.
+
+            El quinto código incorrecto responde "El código no es válido." y
+            borra el token; es el intento siguiente el que recibe "La
+            verificación venció...".
           content:
             application/problem+json:
               schema:
