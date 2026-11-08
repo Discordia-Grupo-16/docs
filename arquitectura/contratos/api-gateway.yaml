@@ -172,6 +172,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+    delete:
+      summary: '[proxy → identity] Logout'
+      operationId: gatewayLogout
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Ver identity.yaml → DELETE /sessions
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /api/v1/sessions/mfa:
     post:
       summary: '[proxy → identity] Segundo paso del login con 2FA'
@@ -451,17 +462,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '429':
           $ref: '#/components/responses/TooManyRequests'
-
-    delete:
-      summary: '[proxy → identity] Logout'
-      operationId: gatewayLogout
-      security:
-        - bearerAuth: []
-      responses:
-        '204':
-          description: Ver identity.yaml → DELETE /sessions
-        '401':
-          $ref: '#/components/responses/Unauthorized'
 
   /api/v1/sessions/refresh:
     post:
