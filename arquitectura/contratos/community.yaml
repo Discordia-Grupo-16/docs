@@ -576,7 +576,8 @@ paths:
       description: >
         CA1 (ingreso exitoso), CA2 (invitación inválida), CA3 (usuario ya es
         miembro) y CA4 (usuario baneado) de "Unirse a servidor vía
-        invitación".
+        invitación". Devuelve 200 en ambos casos exitosos: unirse por primera
+        vez (CA1) y ya ser miembro (CA3).
       operationId: joinServerByInvite
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -585,8 +586,8 @@ paths:
       responses:
         '200':
           description: >
-            El usuario ya era miembro del servidor; se devuelve su membresía sin
-            duplicarla (CA3).
+            El usuario se unió al servidor (CA1) o ya era miembro (CA3).
+            Devuelve la membresía resultante.
           content:
             application/json:
               schema:
@@ -594,17 +595,7 @@ paths:
                 required: [data]
                 properties:
                   data:
-                    $ref: '#/components/schemas/ServerMember'
-        '201':
-          description: El usuario se unió exitosamente al servidor con el rol por defecto (CA1).
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/ServerMember'
+                    $ref: '#/components/schemas/Membership'
         '410':
           description: Invitación expirada, revocada o inexistente (CA2).
           content:
@@ -1430,6 +1421,27 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Permission'
+
+    Membership:
+      description: >
+        Resultado de unirse a un servidor. Incluye el id de la fila porque el
+        cliente lo usa como clave estable, y server_id para evitar un viaje
+        extra al backend.
+      type: object
+      required: [id, server_id, user_id, joined_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        server_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        joined_at:
+          type: string
+          format: date-time
 
     ServerMember:
       description: >
