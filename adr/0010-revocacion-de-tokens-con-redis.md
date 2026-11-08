@@ -1,8 +1,8 @@
 # ADR-0010: Revocación de tokens JWT con Redis
 
-- **Estado:** Propuesto
-- **Fecha:** 2026-09-23
-- **Decisores:**
+- **Estado:** Aceptado
+- **Fecha:** 2026-09-24
+- **Decisores:** Milton (dueño de SCRUM-19, cerrar sesión)
 - **Servicios afectados:** `identity`, `api-gateway`
 
 ## Contexto
@@ -77,6 +77,8 @@ cliente ──request──► api-gateway
 
 El contenedor de Redis se agrega al `docker-compose.yml` de `identity`, junto a la base PostgreSQL. La razón: todo lo relacionado con la gestión de sesiones (emisión de tokens, refresh, revocación) es responsabilidad del dominio de `identity`, y Redis es la infraestructura que soporta esa responsabilidad. El gateway es un **consumidor de lectura** de ese Redis, igual que es un consumidor de la clave secreta del JWT.
 
+Esto describe el entorno local. En AWS, Redis corre como un contenedor más en ECS Fargate, igual que las bases de datos (ver [ADR-0014](0014-despliegue-de-bases-de-datos.md)).
+
 ### Política ante caída de Redis
 
 Si el gateway no puede conectarse a Redis, deja pasar la request (**fail open**). La justificación: el access token ya fue verificado criptográficamente y no está expirado; la revocación es una mejora de seguridad, no el mecanismo primario de autenticación. Una caída de Redis no debe convertirse en una denegación de servicio para todos los usuarios. Se loguea un warning en cada fallo de conexión para que se detecte rápido.
@@ -112,4 +114,5 @@ Ambos servicios (`identity` y `api-gateway`) usan las mismas variables. Los valo
 
 - [ADR-0009](0009-gateway-proxy-sincronico-para-requests-del-cliente.md) — el gateway como proxy sincrónico y validador del JWT
 - [ADR-0001](0001-stack-y-lenguajes-por-servicio.md) — stack por servicio
+- [ADR-0014](0014-despliegue-de-bases-de-datos.md) — despliegue de Redis en AWS
 - Enunciado 2026C2 — Discordia, historia *Login con email y contraseña*, CA5

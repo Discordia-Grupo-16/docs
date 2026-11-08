@@ -11,10 +11,12 @@ info:
     únicamente las políticas transversales documentadas en INF-10.
 
     Correspondencia de ruteo para el camino crítico del Sprint 1:
-    - /api/v1/users*, /api/v1/sessions*, /api/v1/password-resets* → identity
+    - /api/v1/users*, /api/v1/sessions* → identity
     - /api/v1/servers*, /api/v1/invites* → community
     - /api/v1/channels/{channelId}/messages, /api/v1/channels/{channelId}/ws,
       /api/v1/channels/{channelId}/voice-tokens,
+      /api/v1/channels/{channelId}/read, /api/v1/users/me/unread,
+      /api/v1/users/me/read-all,
       /api/v1/servers/{serverId}/voice-participants,
       /api/v1/webhooks/livekit → chat-y-real-time
     - /api/v1/admin/users* → identity (backoffice, solo staff)
@@ -71,7 +73,6 @@ paths:
           $ref: '#/components/responses/UnprocessableEntity'
         '429':
           $ref: '#/components/responses/TooManyRequests'
-
     get:
       summary: '[proxy → identity] Ver perfiles públicos por lote'
       operationId: gatewayGetPublicUsers
@@ -99,6 +100,41 @@ paths:
                       $ref: 'identity.yaml#/components/schemas/PublicUser'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/v1/users/{userId}:
+    get:
+      summary: '[proxy → identity] Ver el perfil público de un usuario'
+      operationId: gatewayGetPublicUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ver identity.yaml → GET /users/{userId}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'identity.yaml#/components/schemas/PublicUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: El usuario no existe o su cuenta está suspendida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
 
@@ -502,75 +538,6 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/users/{userId}:
-    get:
-      summary: '[proxy → identity] Ver el perfil público de un usuario'
-      operationId: gatewayGetPublicUser
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: userId
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Ver identity.yaml → GET /users/{userId}
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: 'identity.yaml#/components/schemas/PublicUser'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-
-  /api/v1/password-resets:
-    post:
-      summary: '[proxy → identity] Pedir el link para restablecer la contraseña'
-      description: Ruta pública. Tiene su propio límite por IP (CA5 de SCRUM-20).
-      operationId: gatewayRequestPasswordReset
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: 'identity.yaml#/components/schemas/PasswordResetRequest'
-      responses:
-        '202':
-          description: Ver identity.yaml → POST /password-resets
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-
-  /api/v1/password-resets/confirmations:
-    post:
-      summary: '[proxy → identity] Fijar la contraseña nueva con el token del link'
-      description: Ruta pública. Tiene su propio límite por IP (CA5 de SCRUM-20).
-      operationId: gatewayConfirmPasswordReset
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: 'identity.yaml#/components/schemas/PasswordResetConfirmRequest'
-      responses:
-        '204':
-          description: Ver identity.yaml → POST /password-resets/confirmations
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-
   /api/v1/servers:
     post:
       summary: '[proxy → community] Crear servidor'
@@ -590,7 +557,6 @@ paths:
           $ref: '#/components/responses/UnprocessableEntity'
         '401':
           $ref: '#/components/responses/Unauthorized'
-
     get:
       summary: '[proxy → community] Listar los servidores del usuario'
       operationId: gatewayListServers
@@ -1333,6 +1299,103 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/users/me/unread:
+    get:
+      summary: '[proxy → chat-y-real-time] Estado de no leídos del usuario'
+      description: >
+        Va a `chat`, no a `identity`, aunque cuelgue de `/users/me`: el
+        gateway enruta por path completo y estos dos literales son más
+        específicos que `/api/v1/users/me`.
+      operationId: gatewayGetUnread
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ver chat.yaml → GET /users/me/unread
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'chat.yaml#/components/schemas/ChannelUnread'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/users/me/read-all:
+    put:
+      summary: '[proxy → chat-y-real-time] Marcar todos los canales como leídos'
+      operationId: gatewayMarkAllRead
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ver chat.yaml → PUT /users/me/read-all
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'chat.yaml#/components/schemas/ReadState'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/channels/{channelId}/read:
+    put:
+      summary: '[proxy → chat-y-real-time] Marcar un canal como leído'
+      operationId: gatewayMarkChannelRead
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messageId]
+              properties:
+                messageId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Ver chat.yaml → PUT /channels/{channelId}/read
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'chat.yaml#/components/schemas/ReadState'
+        '400':
+          description: Ver chat.yaml → body inválido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   /api/v1/servers/{serverId}/voice-participants:
     get:
       summary: '[proxy → chat-y-real-time] Listar quién está conectado a los canales de voz de un servidor'
@@ -1370,8 +1433,8 @@ paths:
         autenticada**, por la firma de LiveKit, que verifica `chat` (ver
         chat.yaml). Por eso el gateway reenvía el header `Authorization` y
         el body sin tocarlos: si los modifica, la firma deja de validar.
-        Lleva un rate limit propio, más generoso que el resto, porque todos
-        los avisos llegan de la misma IP.
+        No lleva rate limit propio: lo limita el límite global por IP del
+        gateway, que corre antes que el de cualquier ruta.
       operationId: gatewayReceiveLiveKitWebhook
       requestBody:
         required: true
@@ -1511,3 +1574,4 @@ components:
           type: string
         instance:
           type: string
+          

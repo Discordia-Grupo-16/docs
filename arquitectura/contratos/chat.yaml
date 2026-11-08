@@ -229,6 +229,155 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /users/me/unread:
+    get:
+      summary: Estado de no leídos del usuario en todos sus canales
+      description: >
+        SCRUM-75. Devuelve un elemento por cada canal de texto no borrado, de
+        un servidor donde el usuario es miembro activo con `VIEW_CHANNEL`, que
+        tenga al menos un mensaje. El indicador por servidor (CA2) lo arma el
+        cliente: un servidor es no leído si alguno de sus canales lo es.
+        Un canal sin estado de lectura cuenta como no leído si su último
+        mensaje es de otro usuario. Un canal donde el último mensaje es del
+        propio usuario nunca es no leído. `mentionCount` vale siempre `0` hasta
+        que exista la optativa "Menciones" (CA3).
+      operationId: getUnread
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+      responses:
+        '200':
+          description: Estado de lectura de cada canal visible con mensajes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ChannelUnread'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /channels/{channelId}/read:
+    put:
+      summary: Marcar un canal como leído hasta un mensaje
+      description: >
+        SCRUM-76, CA1. Adelanta el estado de lectura del usuario en el canal
+        hasta `messageId`. El estado solo avanza: si el usuario ya había leído
+        un mensaje igual o posterior, no cambia nada y la respuesta trae el
+        estado vigente, que puede ser más nuevo que el pedido (es la respuesta
+        a un reenvío o a dos pestañas que marcan a la vez, no un error). Si el
+        estado cambió, `chat` publica `chat.read-state.updated` para
+        sincronizar las otras sesiones del usuario.
+      operationId: markChannelRead
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ChannelId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messageId]
+              properties:
+                messageId:
+                  type: string
+                  format: uuid
+                  description: Último mensaje que el usuario vio. Tiene que ser de este canal.
+      responses:
+        '200':
+          description: Estado de lectura vigente del canal.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ReadState'
+        '400':
+          description: El body no es JSON o `messageId` no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: >
+            El usuario no es miembro activo del servidor del canal, o le falta
+            `VIEW_CHANNEL`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El canal no existe o fue borrado, o el mensaje no existe en ese canal.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/read-all:
+    put:
+      summary: Marcar como leídos todos los canales del usuario
+      description: >
+        SCRUM-76, CA2. Adelanta el estado de lectura de todos los canales
+        visibles del usuario hasta su último mensaje. Es global: no hay una
+        variante por servidor. Sin body. Es idempotente: si ya no queda nada
+        sin leer, responde `data: []` y no publica nada.
+      operationId: markAllRead
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+      responses:
+        '200':
+          description: Los estados que cambiaron, uno por canal que avanzó.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReadState'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /webhooks/livekit:
     post:
       summary: Recibir los avisos de LiveKit sobre las salas de voz
@@ -465,6 +614,59 @@ components:
         - suspended
         - permissions_revoked
         - channel_deleted
+
+    ReadState:
+      type: object
+      required: [channelId, serverId, lastReadMessageId, lastReadAt]
+      description: >
+        Hasta qué mensaje leyó el usuario un canal. Es lo que viaja en las
+        respuestas de los `PUT`, en `chat.read-state.updated` y en el frame
+        `read-state.updated`.
+      properties:
+        channelId:
+          type: string
+          format: uuid
+        serverId:
+          type: string
+          format: uuid
+        lastReadMessageId:
+          type: string
+          format: uuid
+        lastReadAt:
+          type: string
+          format: date-time
+          description: >
+            `createdAt` del mensaje `lastReadMessageId`, no la hora en que se
+            marcó. Junto con el id es la tupla que ordena los avances.
+
+    ChannelUnread:
+      type: object
+      required: [channelId, serverId, lastMessageId, lastReadMessageId, unread, mentionCount]
+      properties:
+        channelId:
+          type: string
+          format: uuid
+        serverId:
+          type: string
+          format: uuid
+        lastMessageId:
+          type: string
+          format: uuid
+          description: Último mensaje del canal.
+        lastReadMessageId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Último mensaje leído, o `null` si el usuario nunca marcó el canal.
+        unread:
+          type: boolean
+          description: >
+            `true` si el último mensaje es de otro usuario y es posterior al
+            último leído (o no hay ninguno leído).
+        mentionCount:
+          type: integer
+          minimum: 0
+          description: Siempre `0` hasta que exista la optativa "Menciones" (CA3 de SCRUM-75).
 
     VoiceParticipant:
       type: object
