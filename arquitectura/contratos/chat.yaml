@@ -641,7 +641,7 @@ components:
 
     ChannelUnread:
       type: object
-      required: [channelId, serverId, lastMessageId, lastReadMessageId, unread, mentionCount]
+      required: [channelId, serverId, lastMessageId, lastMessageAt, lastReadMessageId, lastReadAt, unread, mentionCount]
       properties:
         channelId:
           type: string
@@ -653,11 +653,26 @@ components:
           type: string
           format: uuid
           description: Último mensaje del canal.
+        lastMessageAt:
+          type: string
+          format: date-time
+          description: >
+            `createdAt` de `lastMessageId`. Junto con el id ordena este mensaje
+            contra un `ReadState`: los id son UUID v4 y no se pueden comparar
+            solos. Las fechas se comparan como instantes y no como texto, porque
+            los decimales finales en cero se omiten.
         lastReadMessageId:
           type: string
           format: uuid
           nullable: true
           description: Último mensaje leído, o `null` si el usuario nunca marcó el canal.
+        lastReadAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            `createdAt` de `lastReadMessageId`, no la hora en que se marcó, o
+            `null` si el usuario nunca marcó el canal.
         unread:
           type: boolean
           description: >
