@@ -125,9 +125,10 @@ paths:
         deja reescribir lo que ya dijo. Las reglas del `content` son las del
         envío (1 a 2000 caracteres, sin contar el espacio en los bordes).
 
-        Orden de las validaciones: `X-User-Id` y UUID (400/401), canal y
-        mensaje (404), membresía y permisos (403) y recién después el body
-        (400), de modo que un 403 nunca depende del contenido.
+        Orden de las validaciones: `X-User-Id` y UUID (401/400), canal (404),
+        membresía y permisos (403), body (400) y, en la misma escritura, que el
+        mensaje exista en el canal, no esté borrado (404) y sea del usuario
+        (403). Así un 403 por permisos nunca depende del contenido.
 
         Si el `content` es igual al actual, responde `200` con el mensaje
         vigente, **sin** tocar `editedAt` y **sin** publicar nada. Si cambió,
