@@ -1052,6 +1052,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DetailError'
+  /admin/servers:
+    get:
+      summary: Listar servidores de la plataforma (backoffice)
+      description: >
+        Solo staff: responde 403 si `X-User-Role` no es `staff` (el chequeo se evalúa antes que la validación de los query params).
+        `search` busca por nombre de servidor con coincidencia parcial.
+        Paginado por offset. Devuelve solo los campos necesarios para identificar al servidor en el backoffice.
+      operationId: listServersForAdmin
+      parameters:
+        - $ref: '#/components/parameters/XUserRole'
+        - in: query
+          name: search
+          required: false
+          description: >
+            Texto a buscar en el nombre del servidor. Vacío o solo espacios = sin filtro.
+          schema:
+            type: string
+            maxLength: 100
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Página de servidores que cumplen los filtros.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ data, meta ]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminServer'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '403':
+          description: El usuario autenticado no tiene rol de staff.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Parámetros de búsqueda o paginación inválidos.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   parameters:
@@ -1497,3 +1557,32 @@ components:
           type: string
         instance:
           type: string
+
+    AdminServer:
+      type: object
+      description: Vista de staff de un servidor. No incluye datos profundos como canales o roles.
+      required: [ id, name, memberCount, createdAt ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        memberCount:
+          type: integer
+          description: Cantidad de miembros del servidor.
+        createdAt:
+          type: string
+          format: date-time
+
+    PaginationMeta:
+      type: object
+      required: [ total, limit, offset ]
+      properties:
+        total:
+          type: integer
+          description: Cantidad de servidores que cumplen los filtros, sin paginar.
+        limit:
+          type: integer
+        offset:
+          type: integer
