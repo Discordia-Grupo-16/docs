@@ -175,7 +175,7 @@ cuando cambia su perfil.
 | `community.server.updated` | No (`community`) | Servidor | `server` |
 | `community.server.deleted` | No (`community`) | Servidor | `servers` |
 | `community.server.ownership-transferred` | No (`community`) | Servidor | `server` |
-| `community.server.ownership-transfer-changed` | No (`community`) | El destinatario | `ownershipTransfers` |
+| `community.server.ownership-transfer-changed` | No (`community`) | El destinatario y el owner | `ownershipTransfers` |
 
 Los eventos que todavía no existen los agrega su dueño al catálogo cuando los implementa, y sumar
 la fila al consumidor es una línea y un test. Los nombres de la tabla son los que corresponden a la
