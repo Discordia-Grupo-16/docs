@@ -32,6 +32,7 @@ Viven en el repo de cada servicio, se listan acá solo si afectan a alguien de a
 | ID | Título | Servicio | Estado | Link |
 |---|---|---|---|---|
 | ADR-0001 | Un rol nuevo nace abajo de la jerarquía | `community` | Aceptado | [repo de community](https://github.com/Discordia-Grupo-16/community/blob/develop/docs/adr/0001-posicion-de-los-roles-nuevos.md) |
+| ADR-0001 | Brevo como proveedor de email del recupero de contraseña | `identity` | Aceptado | [repo de identity](https://github.com/Discordia-Grupo-16/identity/blob/develop/docs/adr/0001-proveedor-de-email.md) |
 
 ## Estados
 
