@@ -147,9 +147,8 @@ paths:
         actual intacto. Pide `MANAGE_SERVER` (ADR-0011); el owner lo tiene
         siempre.
 
-        El ícono y el banner se aceptan y se validan, pero su almacenamiento real
-        (S3/Cloudinary) es deuda de infra: `avatar_url` y `banner_url` no cambian
-        en esta versión.
+        El ícono y el banner se suben a Cloudinary: si se envían, `avatar_url` y
+        `banner_url` se actualizan con la URL resultante.
       operationId: updateServer
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -1206,8 +1205,7 @@ components:
           nullable: true
         banner_url:
           description: >
-            Banner del servidor. Null mientras el almacenamiento real
-            (S3/Cloudinary) no esté implementado (deuda de infra de SCRUM-32).
+            Banner del servidor. Null si no se subió ninguno.
           type: string
           format: uri
           nullable: true
@@ -1252,14 +1250,14 @@ components:
           type: string
           format: binary
           description: >
-            Ícono del servidor. JPEG, PNG, GIF o WEBP, hasta 8 MB. Pendiente de
-            almacenamiento real: se valida pero no actualiza `avatar_url`.
+            Ícono del servidor. JPEG, PNG, GIF o WEBP, hasta 8 MB. Se sube a
+            Cloudinary y actualiza `avatar_url`.
         banner:
           type: string
           format: binary
           description: >
-            Banner del servidor. JPEG, PNG, GIF o WEBP, hasta 8 MB. Pendiente de
-            almacenamiento real: se valida pero no actualiza `banner_url`.
+            Banner del servidor. JPEG, PNG, GIF o WEBP, hasta 8 MB. Se sube a
+            Cloudinary y actualiza `banner_url`.
 
     CreateServerRequest:
       type: object
