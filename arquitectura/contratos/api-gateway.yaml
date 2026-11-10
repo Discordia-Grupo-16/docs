@@ -1512,6 +1512,26 @@ paths:
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
 
+  /api/v1/admin/servers/{serverId}:
+    delete:
+      summary: Eliminar Servidor (backoffice)
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          description: Identificador único del servidor
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Ver community.yaml → DELETE .../admin/servers/{serverId}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   securitySchemes:
     bearerAuth:

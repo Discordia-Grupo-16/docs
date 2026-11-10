@@ -1113,6 +1113,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /admin/servers/{serverId}:
+    delete:
+      summary: Eliminar Servidor (backoffice)
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          description: Identificador único del servidor
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Servidor eliminado exitosamente. No devuelve contenido.
+        '403':
+          description: El usuario autenticado no tiene rol de staff
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El servidor no fue encontrado
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+
 components:
   parameters:
     XUserId:
