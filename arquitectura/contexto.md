@@ -28,7 +28,7 @@ Cualquier propuesta se chequea contra esta lista antes de discutirla:
 - [x] Pub/Sub obligatorio para mensajería
 - [ ] Deploy en la nube con CI/CD → [ADR-0006](../adr/0006-proveedor-cloud-y-cicd.md)
 - [ ] Cobertura de tests ≥70% → sin estrategia definida
-- Red lines: **CI roto** o **secretos en el repo** bloquean la evaluación → [ADR-0007](../adr/0007-gestion-de-secretos.md)
+- Red lines: **CI roto** o **secretos en el repo** bloquean la evaluación → [ADR-0015](../adr/0015-gestion-de-configuracion.md) y [`git-workflow.md`](../procesos/git-workflow.md#secretos)
 
 ## Cómo ver el diagrama
 

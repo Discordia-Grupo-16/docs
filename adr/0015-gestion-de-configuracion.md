@@ -5,6 +5,8 @@
 - **Decisores:** Equipo de Infraestructura / Seguridad
 - **Servicios afectados:** Todos los microservicios en ECS y API Gateway
 
+> Este ADR **reemplaza** al [ADR-0007](0007-gestion-de-secretos.md), que nunca llegó a una decisión: la toma este, con los secretos en SSM y la configuración en un `.env` en S3. Las barreras mínimas del ADR-0007 (`.gitignore`, `.env.example`, `gitleaks` y rotar lo que se filtre) siguen vigentes como regla operativa en [`git-workflow.md`](../procesos/git-workflow.md#secretos).
+
 ## Contexto
 
 Las aplicaciones backend requieren credenciales confidenciales (contraseñas de BD, secretos JWT) y variables operativas generales (nombres de entorno, configuraciones de framework). Poner estos valores estáticos en el repositorio de código de Terraform o en las definiciones de las tareas expone la seguridad y obliga a volver a aplicar la infraestructura completa (`terraform apply`) cada vez que un desarrollador requiere cambiar un simple flag operativo.

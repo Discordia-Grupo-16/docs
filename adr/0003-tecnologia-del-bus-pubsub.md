@@ -1,7 +1,7 @@
 # ADR-0003: Tecnología de Pub/Sub
 
 - **Estado:** Aceptado
-- **Fecha:** 2026-09-09
+- **Fecha:** 2026-09-24
 - **Decisores:** Grupo 16
 - **Servicios afectados:** `identity`, `community`, `mod`, `notifications`, `chat-and-real-time`, `metrics`, `monetization`, `api-gateway`
 

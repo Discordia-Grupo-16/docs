@@ -13,8 +13,14 @@ info:
     Correspondencia de ruteo para el camino crítico del Sprint 1:
     - /api/v1/users*, /api/v1/sessions* → identity
     - /api/v1/servers*, /api/v1/invites* → community
-    - /api/v1/channels/{channelId}/messages, /api/v1/channels/{channelId}/ws,
-      /api/v1/channels/{channelId}/voice-tokens → chat-y-real-time
+    - /api/v1/channels/{channelId}/messages,
+      /api/v1/channels/{channelId}/messages/{messageId},
+      /api/v1/channels/{channelId}/ws,
+      /api/v1/channels/{channelId}/voice-tokens,
+      /api/v1/channels/{channelId}/read, /api/v1/users/me/unread,
+      /api/v1/users/me/read-all,
+      /api/v1/servers/{serverId}/voice-participants,
+      /api/v1/webhooks/livekit → chat-y-real-time
     - /api/v1/admin/users* → identity (backoffice, solo staff)
     - /api/v1/password-resets* → identity (públicas, sin JWT)
     - /api/v1/ws-ticket → lo atiende el propio gateway (sin upstream)
@@ -936,6 +942,66 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/channels/{channelId}/messages/{messageId}:
+    patch:
+      summary: '[proxy → chat-y-real-time] Editar un mensaje propio'
+      operationId: gatewayEditMessage
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+        - $ref: '#/components/parameters/MessageId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+      responses:
+        '200':
+          description: Ver chat.yaml → PATCH /channels/{channelId}/messages/{messageId}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'chat.yaml#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      summary: '[proxy → chat-y-real-time] Eliminar un mensaje'
+      operationId: gatewayDeleteMessage
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+        - $ref: '#/components/parameters/MessageId'
+      responses:
+        '204':
+          description: Ver chat.yaml → DELETE /channels/{channelId}/messages/{messageId}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   /api/v1/channels/{channelId}/ws:
     get:
       summary: '[proxy → chat-y-real-time] Upgrade a WebSocket para un canal'
@@ -1295,6 +1361,167 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/users/me/unread:
+    get:
+      summary: '[proxy → chat-y-real-time] Estado de no leídos del usuario'
+      description: >
+        Va a `chat`, no a `identity`, aunque cuelgue de `/users/me`: el
+        gateway enruta por path completo y estos dos literales son más
+        específicos que `/api/v1/users/me`.
+      operationId: gatewayGetUnread
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ver chat.yaml → GET /users/me/unread
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'chat.yaml#/components/schemas/ChannelUnread'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/users/me/read-all:
+    put:
+      summary: '[proxy → chat-y-real-time] Marcar todos los canales como leídos'
+      operationId: gatewayMarkAllRead
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ver chat.yaml → PUT /users/me/read-all
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'chat.yaml#/components/schemas/ReadState'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/channels/{channelId}/read:
+    put:
+      summary: '[proxy → chat-y-real-time] Marcar un canal como leído'
+      operationId: gatewayMarkChannelRead
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messageId]
+              properties:
+                messageId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Ver chat.yaml → PUT /channels/{channelId}/read
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'chat.yaml#/components/schemas/ReadState'
+        '400':
+          description: Ver chat.yaml → body inválido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/servers/{serverId}/voice-participants:
+    get:
+      summary: '[proxy → chat-y-real-time] Listar quién está conectado a los canales de voz de un servidor'
+      operationId: gatewayGetServerVoiceParticipants
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Ver chat.yaml → GET /servers/{serverId}/voice-participants
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'chat.yaml#/components/schemas/VoiceRoomParticipants'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/webhooks/livekit:
+    post:
+      summary: '[proxy → chat-y-real-time] Recibir los avisos de LiveKit sobre las salas de voz'
+      description: >
+        SCRUM-54. Lo llama LiveKit, no un cliente. Sin `security`: el
+        gateway no valida ningún JWT de sesión, pero la llamada **sí está
+        autenticada**, por la firma de LiveKit, que verifica `chat` (ver
+        chat.yaml). Por eso el gateway reenvía el header `Authorization` y
+        el body sin tocarlos: si los modifica, la firma deja de validar.
+        No lleva rate limit propio: lo limita el límite global por IP del
+        gateway, que corre antes que el de cualquier ruta.
+      operationId: gatewayReceiveLiveKitWebhook
+      requestBody:
+        required: true
+        content:
+          application/webhook+json:
+            schema:
+              $ref: 'chat.yaml#/components/schemas/LiveKitWebhookEvent'
+      responses:
+        '200':
+          description: Ver chat.yaml → POST /webhooks/livekit
+        '401':
+          description: Ver chat.yaml → firma ausente o inválida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          description: Ver chat.yaml → falló LiveKit, la base o el bus; LiveKit reintenta.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1318,6 +1545,13 @@ components:
     ChannelId:
       in: path
       name: channelId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MessageId:
+      in: path
+      name: messageId
       required: true
       schema:
         type: string
@@ -1409,3 +1643,4 @@ components:
           type: string
         instance:
           type: string
+          

@@ -1,9 +1,15 @@
 # ADR-0007: Gestión de secretos y configuración
 
-- **Estado:** Propuesto
+- **Estado:** Reemplazado por [ADR-0015](0015-gestion-de-configuracion.md)
 - **Fecha:** —
 - **Decisores:** _(a completar)_
 - **Servicios afectados:** todos
+
+> **Reemplazado por el [ADR-0015](0015-gestion-de-configuracion.md).** Este ADR nunca llegó a una
+> decisión: la tomó el ADR-0015, con los secretos en SSM y la configuración en un `.env` en S3 para
+> AWS. Las barreras mínimas de abajo siguen vigentes como regla operativa en
+> [`git-workflow.md`](../procesos/git-workflow.md#secretos). Se conserva como registro de las
+> opciones que se evaluaron.
 
 > **Red line de la consigna: secretos commiteados en el repositorio bloquean la evaluación.** Esto no es una decisión de gusto — es la única decisión de este repo que puede invalidar el trabajo de todo el cuatrimestre en un solo commit.
 
