@@ -13,7 +13,9 @@ info:
     Correspondencia de ruteo para el camino crítico del Sprint 1:
     - /api/v1/users*, /api/v1/sessions* → identity
     - /api/v1/servers*, /api/v1/invites* → community
-    - /api/v1/channels/{channelId}/messages, /api/v1/channels/{channelId}/ws,
+    - /api/v1/channels/{channelId}/messages,
+      /api/v1/channels/{channelId}/messages/{messageId},
+      /api/v1/channels/{channelId}/ws,
       /api/v1/channels/{channelId}/voice-tokens,
       /api/v1/channels/{channelId}/read, /api/v1/users/me/unread,
       /api/v1/users/me/read-all,
@@ -940,6 +942,66 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/channels/{channelId}/messages/{messageId}:
+    patch:
+      summary: '[proxy → chat-y-real-time] Editar un mensaje propio'
+      operationId: gatewayEditMessage
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+        - $ref: '#/components/parameters/MessageId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+      responses:
+        '200':
+          description: Ver chat.yaml → PATCH /channels/{channelId}/messages/{messageId}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'chat.yaml#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      summary: '[proxy → chat-y-real-time] Eliminar un mensaje'
+      operationId: gatewayDeleteMessage
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+        - $ref: '#/components/parameters/MessageId'
+      responses:
+        '204':
+          description: Ver chat.yaml → DELETE /channels/{channelId}/messages/{messageId}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   /api/v1/channels/{channelId}/ws:
     get:
       summary: '[proxy → chat-y-real-time] Upgrade a WebSocket para un canal'
@@ -1483,6 +1545,13 @@ components:
     ChannelId:
       in: path
       name: channelId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MessageId:
+      in: path
+      name: messageId
       required: true
       schema:
         type: string

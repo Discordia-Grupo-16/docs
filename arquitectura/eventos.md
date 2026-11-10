@@ -111,6 +111,8 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 | `community.member.left` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, userId, reason }` ¹ ³ | SCRUM-137, SCRUM-68, SCRUM-69; ADR-0017 |
 | `community.member.permissions-changed` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61; ADR-0017 |
 | `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId }` | SCRUM-41 |
+| `chat.message.updated` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, editedAt }` ⁹ | SCRUM-44 |
+| `chat.message.deleted` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, deletedAt }` ⁹ | SCRUM-45 |
 | `chat.membership.changed` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ serverId, userId }` ² | SCRUM-146 |
 | `chat.voice.participants-changed` | `chat` | `chat` (fan-out a sockets, cola por instancia), `metrics` (fan-out) | `{ serverId, channelId, participants: [{ userId, joinedAt }], syncedAt }` | SCRUM-54; ADR-0017 |
 | `chat.read-state.updated` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ userId, states: [{ channelId, serverId, lastReadMessageId, lastReadAt }] }` ⁸ | SCRUM-75, SCRUM-76 |
@@ -182,6 +184,13 @@ Y las que agrega `channelOverrides` (ADR-0012):
    - **Idempotencia y orden:** el estado de un canal solo avanza. Se ordena por `(createdAt, messageId)` del mensaje, la misma tupla que usa el historial, así que un evento repetido o fuera de orden no retrocede nada: el cliente aplica `lastReadMessageId` solo si es posterior al que ya tiene.
    - **Qué no publica:** el avance de lectura del autor al enviar un mensaje. Sus otras sesiones ya reciben el `message.created` con su propio `authorId` y lo deducen solas.
    - **Menciones:** el `GET` de no leídos devuelve un `mentionCount` por canal que vale siempre `0` hasta que exista la optativa "Menciones". El evento no lo lleva.
+
+⁹ **Edición y borrado de mensajes** (SCRUM-44 y SCRUM-45). Son la continuación de `chat.message.sent`: mismo problema (cada instancia tiene sus propios sockets), misma solución (**cola por instancia**, y cada una hace `Broadcast(serverId)` del frame `message.updated` o `message.deleted`). Si se declaran por error como cola compartida, el cambio le llega a una fracción de los clientes, sin ningún error. Los destinatarios son los miembros con `VIEW_CHANNEL`.
+   - **Cuándo se publican:** después de confirmar la escritura en Mongo, y **solo si algo cambió**. Una edición con el mismo contenido y un borrado de un mensaje ya borrado responden bien pero no publican.
+   - **`message.deleted` no lleva contenido.** El mensaje borrado conserva su `content` en Mongo (borrado lógico: `deletedAt`, `deletedBy`) como evidencia de moderación, pero nunca sale por la API ni por el bus.
+   - **Idempotencia y orden:** el cliente aplica `message.updated` solo si su `editedAt` es más nuevo que el que ya tiene para ese mensaje (comparado como instante), así que un duplicado o un evento cruzado no retrocede una edición. `message.deleted` es definitivo: no hay forma de deshacer un borrado, así que un duplicado no hace nada.
+   - **Lo que el bus no cubre:** una sesión desconectada no recibe estos frames. Al reconectar, el cliente vuelve a pedir la última página del historial y la fusiona; una edición o borrado de un mensaje más viejo no se ve hasta recargar ese tramo.
+   - **Permiso nuevo:** borrar un mensaje ajeno exige `MANAGE_MESSAGES` (`1 << 9`), que se agrega al catálogo de permisos del [ADR-0011](../adr/0011-roles-y-permisos-en-community.md). No está en el rol por defecto. La proyección de `chat` de un owner o admin ya guardado no tiene el bit hasta el próximo `community.member.permissions-changed` de ese servidor.
 
 ## Nota sobre los dos lenguajes
 
