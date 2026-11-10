@@ -17,13 +17,15 @@ info:
     Del CP2 cubre también Moderación: Expulsar miembro (SCRUM-68), Banear
     miembro (SCRUM-69) y Revocar baneo (SCRUM-70).
 
+    Del CP3 cubre Transferir propiedad del servidor (SCRUM-35) y Eliminar rol
+    (SCRUM-64).
+
     Todos los endpoints exitosos devuelven `{ "data": <recurso> }` y todos los
     errores usan RFC 7807 problem+json (`application/problem+json`) con los
     campos `type`, `title`, `status`, `detail` e `instance` (SCRUM-156).
 
-    Siguen fuera de alcance el resto de la épica Servidores (transferir
-    propiedad, administrar configuración) y los permisos por canal del
-    ADR-0012, que se agregan sin romper este contrato.
+    Siguen fuera de alcance administrar la configuración del servidor y los
+    permisos por canal del ADR-0012, que se agregan sin romper este contrato.
 
 servers:
   - url: http://localhost:8002
@@ -1186,6 +1188,70 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: La lista trae un nombre de permiso que no existe.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Eliminar un rol
+      description: >
+        CA1 y CA2 de "Eliminar rol" (SCRUM-64), y CA2 de "Definir rol por
+        defecto" (SCRUM-63).
+
+
+        Borra el rol y sus asignaciones, así que quienes lo tenían dejan de
+        contar con los permisos que daba (CA1). Publica
+        `community.member.permissions-changed` con los permisos ya resueltos
+        de esos miembros, si había alguno (D7). La lista de roles no tiene
+        evento (ADR-0017): los demás clientes la ven con el respaldo de 60 s.
+
+
+        Las posiciones de los demás roles no cambian. Queda un hueco, y no
+        importa: la jerarquía solo compara posiciones.
+
+
+        El orden de los chequeos define qué código llega: `MANAGE_ROLES`
+        (403), rol inexistente (404), jerarquía (403), rol por defecto (409)
+        y por último quedarse sin `ADMINISTRATOR` (409).
+      operationId: deleteRole
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+      responses:
+        '204':
+          description: El rol se eliminó (CA1).
+        '403':
+          description: >
+            Quien pide no tiene `MANAGE_ROLES` (CA2), o el rol está en su misma
+            posición o por encima en la jerarquía (D7). El owner no pasa por la
+            jerarquía.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor o rol inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >
+            Dos motivos, cada uno con su mensaje:
+
+
+            1. Es el rol por defecto del servidor. Se puede eliminar después
+            de elegir otro con `PUT .../roles/{roleId}/default` (CA2 de
+            SCRUM-63).
+
+
+            2. Es la única fuente de `ADMINISTRATOR` de quien lo elimina: el
+            servidor quedaría sin nadie que pueda administrarlo. Es la misma
+            regla que el `409` de `PATCH`, y como ahí se mira el resultado
+            efectivo: si otro rol le sigue dando `ADMINISTRATOR`, se elimina.
+            El owner nunca llega a este caso: sus permisos salen de ser owner
+            y no de un rol.
           content:
             application/problem+json:
               schema:

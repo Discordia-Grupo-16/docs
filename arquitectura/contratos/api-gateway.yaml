@@ -1394,6 +1394,37 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      summary: '[proxy → community] Eliminar un rol'
+      operationId: gatewayDeleteRole
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+      responses:
+        '204':
+          description: Ver community.yaml → DELETE /servers/{serverId}/roles/{roleId}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: >
+            Sin `MANAGE_ROLES`, o el rol está en su misma posición o por encima
+            en la jerarquía.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >
+            Es el rol por defecto del servidor, o es la única fuente de
+            `ADMINISTRATOR` de quien lo elimina. Ver community.yaml.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/servers/{serverId}/roles/{roleId}/default:
     put:
