@@ -112,6 +112,7 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 | `community.member.permissions-changed` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61, SCRUM-35, SCRUM-64; ADR-0017 |
 | `community.server.ownership-transferred` | `community` | `chat` (avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ serverId, previousOwnerId, newOwnerId }` ⁸ | SCRUM-35; ADR-0017 |
 | `community.server.ownership-transfer-changed` | `community` | `chat` (avisos de UI, cola por instancia ⁷) | `{ serverId, fromUserId, toUserId }` ⁸ | SCRUM-35; ADR-0017 |
+| `community.role.deleted` | `community` | `chat` (avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ serverId, roleId }` ¹¹ | SCRUM-64; ADR-0017 |
 | `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId }` | SCRUM-41 |
 | `chat.message.updated` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, editedAt }` ¹⁰ | SCRUM-44 |
 | `chat.message.deleted` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, deletedAt }` ¹⁰ | SCRUM-45 |
@@ -200,6 +201,9 @@ Y las que agrega `channelOverrides` (ADR-0012):
    - **Idempotencia y orden:** el cliente aplica `message.updated` solo si su `editedAt` es más nuevo que el que ya tiene para ese mensaje (comparado como instante), así que un duplicado o un evento cruzado no retrocede una edición. `message.deleted` es definitivo: no hay forma de deshacer un borrado, así que un duplicado no hace nada.
    - **Lo que el bus no cubre:** una sesión desconectada no recibe estos frames. Al reconectar, el cliente vuelve a pedir la última página del historial y la fusiona; una edición o borrado de un mensaje más viejo no se ve hasta recargar ese tramo.
    - **Permiso nuevo:** borrar un mensaje ajeno exige `MANAGE_MESSAGES` (`1 << 9`), que se agrega al catálogo de permisos del [ADR-0011](../adr/0011-roles-y-permisos-en-community.md). No está en el rol por defecto. La proyección de `chat` de un owner o admin ya guardado no tiene el bit hasta el próximo `community.member.permissions-changed` de ese servidor.
+
+¹¹ **Eliminación de un rol** (SCRUM-64). Se publica **después del commit** y **siempre**, aunque nadie tuviera el rol: es lo que les avisa a todos los miembros que el rol ya no está. Si alguien lo tenía, va además `community.member.permissions-changed` con los permisos ya recalculados de esos miembros.
+   - **Idempotencia:** igual que los avisos de la nota ⁷, un duplicado o un evento fuera de orden repite un aviso que provoca una relectura. Eliminar un rol que ya no existe responde `404` y no publica nada.
 
 ## Nota sobre los dos lenguajes
 

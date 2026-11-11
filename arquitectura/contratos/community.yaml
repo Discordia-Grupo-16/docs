@@ -1202,8 +1202,10 @@ paths:
         Borra el rol y sus asignaciones, así que quienes lo tenían dejan de
         contar con los permisos que daba (CA1). Publica
         `community.member.permissions-changed` con los permisos ya resueltos
-        de esos miembros, si había alguno (D7). La lista de roles no tiene
-        evento (ADR-0017): los demás clientes la ven con el respaldo de 60 s.
+        de esos miembros, si había alguno (D7). Publica siempre
+        `community.role.deleted` con `serverId` y `roleId`, aunque nadie
+        tuviera el rol, para que todos los miembros vean desaparecer el rol
+        sin recargar (ADR-0017).
 
 
         Las posiciones de los demás roles no cambian. Queda un hueco, y no
