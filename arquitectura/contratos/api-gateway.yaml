@@ -1515,6 +1515,11 @@ paths:
   /api/v1/admin/servers/{serverId}:
     delete:
       summary: Eliminar Servidor (backoffice)
+      description: >
+        Solo staff: community responde 403 si el rol del JWT no es `staff`.
+      operationId: gatewayDeleteServerForAdmin
+      security:
+        - bearerAuth: [ ]
       parameters:
         - name: serverId
           in: path
@@ -1522,6 +1527,7 @@ paths:
           description: Identificador único del servidor
           schema:
             type: string
+            format: uuid
       responses:
         '204':
           description: Ver community.yaml → DELETE .../admin/servers/{serverId}
@@ -1531,6 +1537,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
 
 components:
   securitySchemes:
