@@ -1,6 +1,6 @@
 # ADR-0017: Eventos de UI por el WebSocket de `chat`, en lugar del polling del front
 
-- **Estado:** Aceptado
+- **Estado:** Aceptado. Modificado parcialmente por el [ADR-0019](0019-suscripcion-a-avisos-separada-de-mensajes.md) (a quién llegan los avisos de servidor)
 - **Fecha:** 2026-11-01
 - **Decisores:** Persona 2 (dueña de INF-30 en el CP3), como implementadora de la decisión D17 del
   Anexo A del plan del sprint. La gestiona y la acepta quien la escribe, que es lo que el plan
@@ -228,7 +228,8 @@ exista, relee, y se queda con el estado viejo hasta el siguiente aviso.
 - **Un aviso perdido se corrige tarde.** Sin replay, una instancia que estaba caída o un socket
   cortado no recibe lo que pasó mientras tanto. Lo cubre la relectura al reconectar y, en el peor
   caso, el respaldo de 60 segundos.
-- **Quien no está suscripto a un servidor no recibe sus avisos de servidor.** Un miembro sin
+- **Quien no está suscripto a un servidor no recibe sus avisos de servidor** (resuelto por el
+  [ADR-0019](0019-suscripcion-a-avisos-separada-de-mensajes.md)). Un miembro sin
   `VIEW_CHANNEL` depende del respaldo. Es aceptable porque no ve canales, y los avisos que sí lo
   afectan (`permissions`, `servers`) le llegan por `SendToUser`.
 - El cliente gana estado y lógica que antes no tenía: agrupar, dispersar y relear.
@@ -243,7 +244,8 @@ exista, relee, y se queda con el estado viejo hasta el siguiente aviso.
   `server.updated` (`community`, organización del servidor), `server.deleted` (`community`,
   backoffice), los de la transferencia de propiedad (`community`) y `profile-updated` (`identity`,
   que ya figura en el catálogo pero todavía no se publica).
-- `ActiveServers` filtra por `VIEW_CHANNEL` del usuario que cambió su perfil. Si se quiere que lo
+- `ActiveServers` filtra por `VIEW_CHANNEL` del usuario que cambió su perfil (resuelto por el
+  [ADR-0019](0019-suscripcion-a-avisos-separada-de-mensajes.md)). Si se quiere que lo
   vean también los servidores donde no tiene ese permiso, hace falta una consulta sin ese filtro.
 - Si en el futuro se elige el push o un centro de notificaciones, hay que revisar la Opción C.
 
