@@ -25,6 +25,13 @@ paths:
         Without params: returns the last 50 messages (initial load, CA1).
         ?before: scroll-up pagination. ?after: reconnection resync (CA2) —
         returns 404 if the anchor does not exist in this channel.
+
+        No devuelve los mensajes borrados (SCRUM-45), pero un mensaje
+        borrado sigue sirviendo como anchor de `before` y `after`. Los
+        mensajes editados traen `editedAt` (SCRUM-44). Un cliente que se
+        reconecta recibe con `after` los mensajes nuevos, pero no las
+        ediciones ni los borrados de mensajes viejos: para eso vuelve a
+        pedir la última página y la fusiona con lo que tiene.
       operationId: getChannelMessages
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -107,14 +114,156 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /channels/{channelId}/messages/{messageId}:
+    patch:
+      summary: Editar un mensaje propio
+      description: >
+        SCRUM-44. Reemplaza el `content` de un mensaje y lo marca como
+        editado (`editedAt`). Solo lo puede editar su autor, y mientras siga
+        siendo miembro activo del servidor con `VIEW_CHANNEL` y
+        `SEND_MESSAGES`: a quien le sacaron el permiso de escribir no se le
+        deja reescribir lo que ya dijo. Las reglas del `content` son las del
+        envío (1 a 2000 caracteres, sin contar el espacio en los bordes).
+
+        Orden de las validaciones: `X-User-Id` y UUID (401/400), canal (404),
+        membresía y permisos (403), body (400) y, en la misma escritura, que el
+        mensaje exista en el canal, no esté borrado (404) y sea del usuario
+        (403). Así un 403 por permisos nunca depende del contenido.
+
+        Si el `content` es igual al actual, responde `200` con el mensaje
+        vigente, **sin** tocar `editedAt` y **sin** publicar nada. Si cambió,
+        `chat` publica `chat.message.updated` para que las otras instancias
+        avisen a sus clientes (frame `message.updated`).
+      operationId: editMessage
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ChannelId'
+        - $ref: '#/components/parameters/MessageId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+      responses:
+        '200':
+          description: El mensaje con su contenido vigente.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Message'
+        '400':
+          description: UUID malformado, el body no es JSON, o `content` vacío o de más de 2000 caracteres.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: >
+            El usuario no es el autor del mensaje, o no es miembro activo del
+            servidor, o le falta `VIEW_CHANNEL` o `SEND_MESSAGES`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El canal no existe, o el mensaje no existe en ese canal o está borrado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Eliminar un mensaje
+      description: >
+        SCRUM-45. Borra el mensaje para todos. Lo puede borrar su autor, o
+        quien tenga `MANAGE_MESSAGES` en el servidor; en los dos casos hace
+        falta ser miembro activo con `VIEW_CHANNEL`. Borrar lo propio **no**
+        pide `SEND_MESSAGES`: retirar lo que uno dijo tiene que poder
+        hacerse siempre.
+
+        El borrado es lógico: `chat` guarda `deletedAt` y `deletedBy` y
+        **conserva el contenido** como evidencia de moderación, pero la API
+        nunca lo vuelve a devolver. Un mensaje borrado no aparece en el
+        historial, y `PATCH` sobre él responde `404`. Sus ids siguen siendo
+        anclas válidas de `?before` y `?after` del historial, para que un
+        cliente que se desconectó con ese mensaje como último visto pueda
+        resincronizar.
+
+        Es idempotente: borrar un mensaje ya borrado responde `204` y no
+        publica nada. Si se borró, `chat` publica `chat.message.deleted`
+        (frame `message.deleted`, sin contenido).
+      operationId: deleteMessage
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ChannelId'
+        - $ref: '#/components/parameters/MessageId'
+      responses:
+        '204':
+          description: El mensaje quedó borrado (o ya lo estaba).
+        '400':
+          description: UUID malformado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: >
+            El usuario no es el autor y no tiene `MANAGE_MESSAGES`, o no es
+            miembro activo del servidor, o le falta `VIEW_CHANNEL`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El canal no existe, o el mensaje no existe en ese canal.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /channels/{channelId}/ws:
     get:
       summary: WebSocket upgrade endpoint for a channel
       description: >
         Not a regular REST endpoint. This fixed path performs an HTTP Upgrade
         to a WebSocket connection scoped to the given channel. Clients send
-        SendOrEditMessageEvent payloads to create messages (edición de
-        mensaje es optativa y no está en el Sprint 1), and receive every
+        SendOrEditMessageEvent payloads to create messages (la edición y el
+        borrado van por HTTP, `PATCH` y `DELETE` de
+        `/channels/{channelId}/messages/{messageId}`), and receive every
         Message broadcast to this channel. El handshake de upgrade requiere
         X-User-Id/X-User-Role, propagados por el API Gateway a partir de un
         JWT ya validado, y se autoriza contra los permisos del usuario en
@@ -132,6 +281,14 @@ paths:
           el staff (`identity.user.suspended`). El cliente no reconecta,
           descarta los tokens y lleva al login con el aviso de cuenta
           suspendida.
+
+
+        Frames que `chat` envía por esta conexión además de los mensajes:
+        `VoiceParticipantsUpdatedFrame` (`voice-participants.updated`,
+        SCRUM-54), cuando cambia quién está conectado a un canal de voz;
+        `MessageUpdatedFrame` (`message.updated`, SCRUM-44), cuando se edita
+        un mensaje; y `MessageDeletedFrame` (`message.deleted`, SCRUM-45),
+        cuando se borra uno.
       operationId: channelWebSocket
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -224,8 +381,275 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /users/me/unread:
+    get:
+      summary: Estado de no leídos del usuario en todos sus canales
+      description: >
+        SCRUM-75. Devuelve un elemento por cada canal de texto no borrado, de
+        un servidor donde el usuario es miembro activo con `VIEW_CHANNEL`, que
+        tenga al menos un mensaje. El indicador por servidor (CA2) lo arma el
+        cliente: un servidor es no leído si alguno de sus canales lo es.
+        Un canal sin estado de lectura cuenta como no leído si su último
+        mensaje es de otro usuario. Un canal donde el último mensaje es del
+        propio usuario nunca es no leído. `mentionCount` vale siempre `0` hasta
+        que exista la optativa "Menciones" (CA3).
+      operationId: getUnread
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+      responses:
+        '200':
+          description: Estado de lectura de cada canal visible con mensajes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ChannelUnread'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /channels/{channelId}/read:
+    put:
+      summary: Marcar un canal como leído hasta un mensaje
+      description: >
+        SCRUM-76, CA1. Adelanta el estado de lectura del usuario en el canal
+        hasta `messageId`. El estado solo avanza: si el usuario ya había leído
+        un mensaje igual o posterior, no cambia nada y la respuesta trae el
+        estado vigente, que puede ser más nuevo que el pedido (es la respuesta
+        a un reenvío o a dos pestañas que marcan a la vez, no un error). Si el
+        estado cambió, `chat` publica `chat.read-state.updated` para
+        sincronizar las otras sesiones del usuario.
+      operationId: markChannelRead
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ChannelId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messageId]
+              properties:
+                messageId:
+                  type: string
+                  format: uuid
+                  description: Último mensaje que el usuario vio. Tiene que ser de este canal.
+      responses:
+        '200':
+          description: Estado de lectura vigente del canal.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ReadState'
+        '400':
+          description: El body no es JSON o `messageId` no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: >
+            El usuario no es miembro activo del servidor del canal, o le falta
+            `VIEW_CHANNEL`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El canal no existe o fue borrado, o el mensaje no existe en ese canal.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/read-all:
+    put:
+      summary: Marcar como leídos todos los canales del usuario
+      description: >
+        SCRUM-76, CA2. Adelanta el estado de lectura de todos los canales
+        visibles del usuario hasta su último mensaje. Es global: no hay una
+        variante por servidor. Sin body. Es idempotente: si ya no queda nada
+        sin leer, responde `data: []` y no publica nada.
+      operationId: markAllRead
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+      responses:
+        '200':
+          description: Los estados que cambiaron, uno por canal que avanzó.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReadState'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /webhooks/livekit:
+    post:
+      summary: Recibir los avisos de LiveKit sobre las salas de voz
+      description: >
+        SCRUM-54. Lo llama LiveKit, no un cliente: no lleva `X-User-Id`. Se
+        autentica por firma, no por JWT de sesión: el header `Authorization`
+        trae el JWT que LiveKit firma con el secret de `LIVEKIT_API_SECRET`
+        (sin el prefijo `Bearer`) e incluye el sha256 del body, así que
+        prueba que el aviso lo mandó LiveKit y que nadie tocó el cuerpo. Por
+        eso nada entre LiveKit y `chat` puede modificar el body.
+
+
+        El webhook solo dispara: ante `participant_joined`,
+        `participant_left`, `participant_connection_aborted` o
+        `room_finished`, `chat` no aplica el evento sino que relee la sala
+        entera con `ListParticipants` y guarda esa foto, de modo que un aviso
+        perdido o repetido se corrige con el siguiente. Cualquier otro
+        evento (`track_*`, `room_started`, etc.) se responde `200` sin
+        hacer nada, igual que el de una sala que no es un canal de voz
+        conocido.
+
+
+        Si la relectura, el guardado o la publicación de
+        `chat.voice.participants-changed` fallan, responde `500` para que
+        LiveKit reintente. Solo existe si la voz está configurada en el
+        entorno.
+      operationId: receiveLiveKitWebhook
+      security:
+        - livekitSignature: []
+      requestBody:
+        required: true
+        content:
+          application/webhook+json:
+            schema:
+              $ref: '#/components/schemas/LiveKitWebhookEvent'
+      responses:
+        '200':
+          description: Aviso procesado, o ignorado porque no interesa.
+        '401':
+          description: Falta el header `Authorization`, o la firma no es válida o no coincide con el body.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Falló LiveKit, la base o la publicación al bus. LiveKit reintenta.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /servers/{serverId}/voice-participants:
+    get:
+      summary: Listar quién está conectado a los canales de voz de un servidor
+      description: >
+        SCRUM-54. Foto inicial al abrir un servidor, y relectura al
+        reconectar el WebSocket o volver a la app (ADR-0017): los frames que
+        se perdieron con el socket caído no se reenvían. Valida contra la
+        proyección local que el usuario sea miembro activo del servidor con
+        `VIEW_CHANNEL` (403 si no). Devuelve solo las salas que tienen gente;
+        un canal ausente de la lista está vacío. Si la voz no está
+        configurada en el entorno responde `200` con `data: []`. Cada sala
+        trae su `syncedAt`, con el que el cliente descarta fotos más viejas
+        que la que ya tiene.
+      operationId: getServerVoiceParticipants
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Salas del servidor con al menos un participante.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VoiceRoomParticipants'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: El usuario no es miembro activo del servidor, o le falta `VIEW_CHANNEL`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
+  securitySchemes:
+    livekitSignature:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: >
+        JWT firmado por LiveKit con el secret de `LIVEKIT_API_SECRET`, sin
+        prefijo `Bearer`, con el sha256 del body. Lo valida `chat`; es la
+        única autenticación de `POST /webhooks/livekit`.
+
   parameters:
+    ServerId:
+      in: path
+      name: serverId
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Debe referenciar un Server existente en `community`.
     XUserId:
       in: header
       name: X-User-Id
@@ -255,11 +679,19 @@ components:
         type: string
         format: uuid
       description: Debe referenciar un Channel existente en `community`.
+    MessageId:
+      in: path
+      name: messageId
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Mensaje del canal indicado en `channelId`.
 
   schemas:
     Message:
       type: object
-      required: [messageId, channelId, serverId, authorId, content, createdAt, clientMessageId]
+      required: [messageId, channelId, serverId, authorId, content, createdAt, editedAt, clientMessageId]
       properties:
         messageId:
           type: string
@@ -281,6 +713,17 @@ components:
         createdAt:
           type: string
           format: date-time
+        editedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Momento de la última edición, en UTC y con precisión de
+            milisegundos, o `null` si nunca se editó (SCRUM-44). No hay
+            historial de ediciones: solo se guarda la última versión. El
+            cliente aplica una edición recibida solo si su `editedAt` es más
+            nuevo que el que ya tiene, comparado como instante. `message.created`
+            y el ack de `message.send` no cambian de forma.
         clientMessageId:
           type: string
           format: uuid
@@ -303,6 +746,66 @@ components:
           type: string
           minLength: 1
           maxLength: 2000
+
+    MessageUpdatedFrame:
+      type: object
+      description: >
+        Frame (SCRUM-44) que `chat` envía por el WebSocket de chat cuando se
+        edita un mensaje. Se entrega con `Broadcast(serverId)`, solo a los
+        miembros con `VIEW_CHANNEL`. Lleva los datos y no es un `invalidate`,
+        porque el mensaje es de `chat` (ADR-0017). Nace del evento
+        `chat.message.updated`.
+      required: [type, messageId, channelId, serverId, authorId, content, editedAt]
+      properties:
+        type:
+          type: string
+          enum: [message.updated]
+        messageId:
+          type: string
+          format: uuid
+        channelId:
+          type: string
+          format: uuid
+        serverId:
+          type: string
+          format: uuid
+        authorId:
+          type: string
+          format: uuid
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        editedAt:
+          type: string
+          format: date-time
+          description: Misma regla que en `Message.editedAt`.
+
+    MessageDeletedFrame:
+      type: object
+      description: >
+        Frame (SCRUM-45) que `chat` envía por el WebSocket de chat cuando se
+        borra un mensaje. **No lleva contenido.** Se entrega con
+        `Broadcast(serverId)`. Nace del evento `chat.message.deleted`. El
+        cliente saca el mensaje de lo que muestra; si no lo tenía cargado,
+        lo ignora.
+      required: [type, messageId, channelId, serverId, deletedAt]
+      properties:
+        type:
+          type: string
+          enum: [message.deleted]
+        messageId:
+          type: string
+          format: uuid
+        channelId:
+          type: string
+          format: uuid
+        serverId:
+          type: string
+          format: uuid
+        deletedAt:
+          type: string
+          format: date-time
 
     VoiceToken:
       type: object
@@ -342,6 +845,167 @@ components:
         - suspended
         - permissions_revoked
         - channel_deleted
+
+    ReadState:
+      type: object
+      required: [channelId, serverId, lastReadMessageId, lastReadAt]
+      description: >
+        Hasta qué mensaje leyó el usuario un canal. Es lo que viaja en las
+        respuestas de los `PUT`, en `chat.read-state.updated` y en el frame
+        `read-state.updated`.
+      properties:
+        channelId:
+          type: string
+          format: uuid
+        serverId:
+          type: string
+          format: uuid
+        lastReadMessageId:
+          type: string
+          format: uuid
+        lastReadAt:
+          type: string
+          format: date-time
+          description: >
+            `createdAt` del mensaje `lastReadMessageId`, no la hora en que se
+            marcó. Junto con el id es la tupla que ordena los avances.
+
+    ChannelUnread:
+      type: object
+      required: [channelId, serverId, lastMessageId, lastMessageAt, lastReadMessageId, lastReadAt, unread, mentionCount]
+      properties:
+        channelId:
+          type: string
+          format: uuid
+        serverId:
+          type: string
+          format: uuid
+        lastMessageId:
+          type: string
+          format: uuid
+          description: Último mensaje del canal.
+        lastMessageAt:
+          type: string
+          format: date-time
+          description: >
+            `createdAt` de `lastMessageId`. Junto con el id ordena este mensaje
+            contra un `ReadState`: los id son UUID v4 y no se pueden comparar
+            solos. Las fechas se comparan como instantes y no como texto, porque
+            los decimales finales en cero se omiten.
+        lastReadMessageId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Último mensaje leído, o `null` si el usuario nunca marcó el canal.
+        lastReadAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            `createdAt` de `lastReadMessageId`, no la hora en que se marcó, o
+            `null` si el usuario nunca marcó el canal.
+        unread:
+          type: boolean
+          description: >
+            `true` si el último mensaje es de otro usuario y es posterior al
+            último leído (o no hay ninguno leído).
+        mentionCount:
+          type: integer
+          minimum: 0
+          description: Siempre `0` hasta que exista la optativa "Menciones" (CA3 de SCRUM-75).
+
+    VoiceParticipant:
+      type: object
+      description: Un usuario conectado a la sala de voz de un canal.
+      required: [userId, joinedAt]
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: >
+            Referencia a User.id en `identity`. Es la identidad del
+            participante en LiveKit. El cliente resuelve nombre y avatar vía
+            `identity`. No incluye mute ni "está hablando": son estados de la
+            llamada y se ven estando adentro.
+        joinedAt:
+          type: string
+          format: date-time
+          description: Momento en que el participante se unió a la sala, según LiveKit, en UTC.
+
+    VoiceRoomParticipants:
+      type: object
+      description: Quién está conectado a la sala de voz de un canal, según la última foto que `chat` guardó.
+      required: [channelId, participants, syncedAt]
+      properties:
+        channelId:
+          type: string
+          format: uuid
+          description: Canal de voz; es igual al nombre de la sala de LiveKit.
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoiceParticipant'
+          description: Ordenados por `joinedAt`.
+        syncedAt:
+          type: string
+          format: date-time
+          description: >
+            Hora, en UTC, tomada **antes** de leer la sala a LiveKit. El
+            cliente aplica una foto solo si su `syncedAt` es mayor que el que
+            ya tiene para ese canal.
+
+    VoiceParticipantsUpdatedFrame:
+      type: object
+      description: >
+        Frame (SCRUM-54, ADR-0017) que `chat` envía por el WebSocket de chat
+        (`/channels/{channelId}/ws`) cuando cambia quién está conectado a un
+        canal de voz. Se entrega con `Broadcast(serverId)` a las conexiones
+        suscriptas a ese servidor (ADR-0011), y lleva la lista completa y no
+        un delta. Un `participants` vacío significa que el canal quedó vacío.
+        Nace del evento `chat.voice.participants-changed`.
+      required: [type, serverId, channelId, participants, syncedAt]
+      properties:
+        type:
+          type: string
+          enum: [voice-participants.updated]
+        serverId:
+          type: string
+          format: uuid
+        channelId:
+          type: string
+          format: uuid
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoiceParticipant'
+        syncedAt:
+          type: string
+          format: date-time
+          description: Misma regla que en `VoiceRoomParticipants`.
+
+    LiveKitWebhookEvent:
+      type: object
+      description: >
+        Aviso de LiveKit (solo los campos que `chat` lee; el resto se
+        ignora). `chat` no usa el contenido para saber quién está en la sala:
+        solo el nombre de la sala y el tipo de evento.
+      required: [event]
+      properties:
+        id:
+          type: string
+          description: Id del aviso; `chat` lo loguea.
+        event:
+          type: string
+          description: >
+            Tipo de evento. Disparan la relectura de la sala:
+            `participant_joined`, `participant_left`,
+            `participant_connection_aborted` y `room_finished`.
+        room:
+          type: object
+          properties:
+            name:
+              type: string
+              description: Nombre de la sala; es igual al `channelId`.
 
     ErrorResponse:
       type: object

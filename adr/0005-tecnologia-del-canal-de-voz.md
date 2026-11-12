@@ -16,7 +16,7 @@ El equipo no tiene experiencia previa declarada en tiempo real, y esta épica co
 ### Opción A — Servicio gestionado (LiveKit Cloud, Agora, Daily, Twilio)
 
 - A favor: SDK para web y React Native, TURN incluido, sale funcionando en días; el riesgo técnico se terceriza y el equipo se concentra en el producto.
-- En contra: dependencia de un tercero y de su free tier; hace falta cuenta y credenciales (ver [ADR-0007](0007-gestion-de-secretos.md)); menos "mérito arquitectónico" si la cátedra valora la implementación propia.
+- En contra: dependencia de un tercero y de su free tier; hace falta cuenta y credenciales (ver [ADR-0015](0015-gestion-de-configuracion.md)); menos "mérito arquitectónico" si la cátedra valora la implementación propia.
 
 ### Opción B — SFU propio self-hosted (LiveKit OSS, mediasoup, Janus)
 
@@ -49,17 +49,16 @@ La Opción C se descarta: no escala más allá de 3 o 4 participantes por canal.
 **Negativas / costo que aceptamos**
 
 - Dependencia de un tercero y de su free tier (5000 minutos por mes, 100 conexiones simultáneas).
-- Hace falta una cuenta y credenciales, gestionadas según [ADR-0007](0007-gestion-de-secretos.md).
+- Hace falta una cuenta y credenciales, gestionadas según [ADR-0015](0015-gestion-de-configuracion.md): en AWS van en SSM, como el resto de los secretos.
 - Mobile necesita un development build: el SDK de LiveKit no corre en Expo Go.
 - `chat-and-real-time` sube a Go 1.26.9, la versión que pide el SDK de servidor.
 
 **Qué queda pendiente por esta decisión**
 
-- Decidir [ADR-0007](0007-gestion-de-secretos.md) para guardar las claves de LiveKit en la nube.
 - Documentar el paso a LiveKit OSS si se agota el free tier o lo pide la cátedra.
 
 ## Referencias
 
 - [ADR-0006](0006-proveedor-cloud-y-cicd.md) — dónde correría el SFU si se pasa a LiveKit OSS
-- [ADR-0007](0007-gestion-de-secretos.md) — credenciales de LiveKit Cloud
+- [ADR-0015](0015-gestion-de-configuracion.md) — credenciales de LiveKit Cloud
 - SCRUM-51 — Unirse a un canal de voz
