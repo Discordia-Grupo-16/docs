@@ -14,9 +14,16 @@ info:
     el permiso efectivo es el OR de los roles, y `community` es el único que
     lo resuelve.
 
-    Siguen fuera de alcance Moderación, el resto de la épica Servidores
-    (transferir propiedad, administrar configuración) y los permisos por canal
-    del ADR-0012, que se agregan sin romper este contrato.
+    Del CP2 cubre también Moderación: Expulsar miembro (SCRUM-68), Banear
+    miembro (SCRUM-69) y Revocar baneo (SCRUM-70).
+
+    Todos los endpoints exitosos devuelven `{ "data": <recurso> }` y todos los
+    errores usan RFC 7807 problem+json (`application/problem+json`) con los
+    campos `type`, `title`, `status`, `detail` e `instance` (SCRUM-156).
+
+    Siguen fuera de alcance el resto de la épica Servidores (transferir
+    propiedad, administrar configuración) y los permisos por canal del
+    ADR-0012, que se agregan sin romper este contrato.
 
 servers:
   - url: http://localhost:8002
@@ -195,21 +202,25 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ServerMember'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServerMember'
         '403':
           description: Quien pregunta no es miembro del servidor.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Servidor inexistente.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
 
   /servers/{serverId}/members/{userId}:
     delete:
@@ -260,16 +271,16 @@ paths:
             el usuario es miembro como si no: el código de respuesta no sirve
             para enumerar miembros.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: >
             Servidor inexistente, o el usuario no es miembro de ese servidor.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
 
   /servers/{serverId}/bans/:
     get:
@@ -302,23 +313,27 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ServerBan'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServerBan'
         '403':
           description: >
             Quien pregunta no tiene `BAN_MEMBERS` (CA2), o no es miembro del
             servidor.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Servidor inexistente.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
 
   /servers/{serverId}/bans/{userId}:
     put:
@@ -382,16 +397,16 @@ paths:
             `BAN_MEMBERS` recibe `403` tanto si el usuario es miembro como si
             no: el código de respuesta no sirve para enumerar miembros.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: >
             Servidor inexistente, o el usuario no es miembro de ese servidor.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: >
             Motivo de más de 500 caracteres. Se mide **después** de recortar los
@@ -402,9 +417,9 @@ paths:
             del servidor, así que no filtra nada y falla rápido. Un motivo
             inválido contra un servidor inexistente responde `422`, no `404`.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
                 
     delete:
       summary: Revocar el baneo de un usuario
@@ -447,15 +462,15 @@ paths:
             baneado como si no: el código de respuesta no sirve para enumerar
             baneados.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Servidor inexistente.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
 
   /servers/{serverId}/invites:
     post:
@@ -561,7 +576,8 @@ paths:
       description: >
         CA1 (ingreso exitoso), CA2 (invitación inválida), CA3 (usuario ya es
         miembro) y CA4 (usuario baneado) de "Unirse a servidor vía
-        invitación".
+        invitación". Devuelve 200 en ambos casos exitosos: unirse por primera
+        vez (CA1) y ya ser miembro (CA3).
       operationId: joinServerByInvite
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -570,8 +586,8 @@ paths:
       responses:
         '200':
           description: >
-            El usuario ya era miembro del servidor; se lo redirige sin
-            duplicar la membresía (CA3).
+            El usuario se unió al servidor (CA1) o ya era miembro (CA3).
+            Devuelve la membresía resultante.
           content:
             application/json:
               schema:
@@ -579,17 +595,7 @@ paths:
                 required: [data]
                 properties:
                   data:
-                    $ref: '#/components/schemas/Server'
-        '201':
-          description: El usuario se unió exitosamente al servidor con el rol por defecto (CA1).
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Server'
+                    $ref: '#/components/schemas/Membership'
         '410':
           description: Invitación expirada, revocada o inexistente (CA2).
           content:
@@ -772,24 +778,28 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Role'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Role'
         '403':
           description: Quien pregunta no es miembro del servidor.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: >
             Servidor inexistente. Va antes que el 403: no existir no es un dato
             que haya que proteger, y chequear la membresía primero haría que un
             servidor que nunca existió conteste "no sos miembro".
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
 
     post:
       summary: Crear un rol
@@ -827,25 +837,29 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Role'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Role'
         '403':
           description: Quien pide no tiene `MANAGE_ROLES`.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Servidor inexistente.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: Nombre vacío o de más de 100 caracteres.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
 
   /servers/{serverId}/roles/{roleId}:
     patch:
@@ -884,7 +898,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Role'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Role'
         '403':
           description: >
             Tres motivos distintos, cada uno con su mensaje, porque se
@@ -905,15 +923,15 @@ paths:
             es distinto porque concede todo lo demás, `MANAGE_ROLES`
             incluido. El owner no pasa por esta regla.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Servidor o rol inexistente.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: >
             CA2 de SCRUM-61, en su caso estricto: quien edita **un rol de
@@ -926,15 +944,15 @@ paths:
             cambio responde 200, porque se mira el resultado efectivo y no
             este rol solo.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: La lista trae un nombre de permiso que no existe.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
 
   /servers/{serverId}/roles/{roleId}/default:
     put:
@@ -969,15 +987,15 @@ paths:
             Quien pide no tiene `MANAGE_ROLES`, o el rol está en su misma
             posición o por encima.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Servidor o rol inexistente.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
 
   /servers/{serverId}/roles/{roleId}/members/{userId}:
     put:
@@ -1006,17 +1024,17 @@ paths:
             superior a la suya. El owner nunca puede ser blanco: nadie está
             por encima suyo.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: >
             Servidor o rol inexistente, o el usuario no es miembro de este
             servidor.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
 
     delete:
       summary: Quitarle un rol a un miembro
@@ -1041,17 +1059,17 @@ paths:
         '403':
           description: Los mismos tres motivos que en el `PUT`.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: >
             Servidor o rol inexistente, o el usuario no es miembro de este
             servidor.
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/DetailError'
+                $ref: '#/components/schemas/ErrorResponse'
   /admin/servers:
     get:
       summary: Listar servidores de la plataforma (backoffice)
@@ -1465,6 +1483,27 @@ components:
           items:
             $ref: '#/components/schemas/Permission'
 
+    Membership:
+      description: >
+        Resultado de unirse a un servidor. Incluye el id de la fila porque el
+        cliente lo usa como clave estable, y server_id para evitar un viaje
+        extra al backend.
+      type: object
+      required: [id, server_id, user_id, joined_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        server_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        joined_at:
+          type: string
+          format: date-time
+
     ServerMember:
       description: >
         Un miembro del servidor. Sin nombre ni avatar, que son de `identity`,
@@ -1508,40 +1547,6 @@ components:
           description: >
             Hoy sale sin zona horaria (sin `Z`), así que no cumple `date-time` ni
             `procesos/convenciones.md`: es la deuda conocida de las fechas de `community`.
-
-    DetailError:
-      description: >
-        La forma de error que `community` devuelve hoy, que **no** es el
-        `ErrorResponse` (RFC 7807) que declaran las convenciones de esta
-        carpeta. El API Gateway la traduce a `application/problem+json` antes
-        de que llegue al cliente, así que `api-gateway.yaml` sí documenta
-        problem+json para estos mismos endpoints.
-
-        Se documenta tal como es para que este contrato no describa un
-        comportamiento que no existe. Normalizar los errores del servicio es
-        deuda de INF-01, no de las historias de permisos.
-      type: object
-      required: [detail]
-      properties:
-        detail:
-          oneOf:
-            - description: El mensaje de una `HTTPException`.
-              type: string
-            - description: >
-                Los errores de validación de FastAPI (422), que llegan como
-                lista y no como texto.
-              type: array
-              items:
-                type: object
-                properties:
-                  loc:
-                    type: array
-                    items:
-                      type: string
-                  msg:
-                    type: string
-                  type:
-                    type: string
 
     ErrorResponse:
       type: object

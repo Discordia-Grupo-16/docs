@@ -31,6 +31,9 @@ services:
 
   community-service:
     ports: !reset []
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
     networks:
       - red-local
       - default
