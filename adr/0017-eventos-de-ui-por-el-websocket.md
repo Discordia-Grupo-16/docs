@@ -121,8 +121,8 @@ que aprende algo nuevo es el que ya tiene los sockets, y lo que aprende es *qué
 | Campo | Obligatorio | Significado |
 | --- | :-: | --- |
 | `type` | sí | Siempre `invalidate` |
-| `resources` | sí | Qué quedó viejo: `servers`, `server`, `channels`, `permissions`, `members`, `bans`, `profile`, `ownershipTransfers` |
-| `serverId` | no | A qué servidor se refieren los recursos. Va con `server`, `channels`, `permissions`, `members` y `bans`; no con `servers` ni `profile` |
+| `resources` | sí | Qué quedó viejo: `servers`, `server`, `channels`, `permissions`, `members`, `bans`, `roles`, `profile`, `ownershipTransfers` |
+| `serverId` | no | A qué servidor se refieren los recursos. Va con `server`, `channels`, `permissions`, `members`, `bans` y `roles`; no con `servers` ni `profile` |
 | `userId` | no | De quién cambió el perfil. Solo va con `profile` y con `members` cuando el motivo es un cambio de perfil |
 
 - **`resources` es un conjunto abierto.** El cliente ignora los valores que no conoce, igual que ya
@@ -175,7 +175,8 @@ cuando cambia su perfil.
 | `community.server.updated` | No (`community`) | Servidor | `server` |
 | `community.server.deleted` | No (`community`) | Servidor | `servers` |
 | `community.server.ownership-transferred` | No (`community`) | Servidor | `server` |
-| `community.server.ownership-transfer-changed` | No (`community`) | El destinatario | `ownershipTransfers` |
+| `community.server.ownership-transfer-changed` | No (`community`) | El destinatario y el owner | `ownershipTransfers` |
+| `community.role.deleted` | No (`community`) | Servidor | `roles` y `members` |
 
 Los eventos que todavía no existen los agrega su dueño al catálogo cuando los implementa, y sumar
 la fila al consumidor es una línea y un test. Los nombres de la tabla son los que corresponden a la
@@ -237,8 +238,9 @@ exista, relee, y se queda con el estado viejo hasta el siguiente aviso.
 
 **Qué queda pendiente por esta decisión**
 
-- **La lista de roles y el desbaneo no tienen evento** y siguen con el respaldo de 60 segundos
-  hasta que lo tengan.
+- **La lista de roles tiene aviso solo al eliminar un rol** (`community.role.deleted`). Crear un
+  rol, editar sus permisos y marcarlo por defecto, igual que el desbaneo, no tienen evento y siguen
+  con el respaldo de 60 segundos hasta que lo tengan.
 - Los eventos que marca la tabla como inexistentes los publican sus dueños: `layout-updated` y
   `server.updated` (`community`, organización del servidor), `server.deleted` (`community`,
   backoffice), los de la transferencia de propiedad (`community`) y `profile-updated` (`identity`,
