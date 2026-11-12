@@ -17,6 +17,12 @@ info:
     Del CP2 cubre también Moderación: Expulsar miembro (SCRUM-68), Banear
     miembro (SCRUM-69) y Revocar baneo (SCRUM-70).
 
+    Del CP2 cubre también Organización de canales: Organizar canales en
+    categorías (SCRUM-39) —crear, renombrar, eliminar y reordenar categorías,
+    mover canales a una categoría vía `PATCH` o drag & drop— y Reordenar
+    canales (SCRUM-40) —`POST /channels/reorder` recibe la lista completa de
+    ids en el orden deseado y actualiza el campo `position` de cada uno—.
+
     Todos los endpoints exitosos devuelven `{ "data": <recurso> }` y todos los
     errores usan RFC 7807 problem+json (`application/problem+json`) con los
     campos `type`, `title`, `status`, `detail` e `instance` (SCRUM-156).
@@ -761,6 +767,240 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /servers/{serverId}/channels/reorder:
+    post:
+      summary: Reordenar los canales del servidor (SCRUM-40)
+      description: >
+        CA1 de "Reordenar canales". Recibe la lista **completa** de ids de
+        canales del servidor en el orden deseado y asigna posiciones
+        consecutivas (0, 1, 2 …) manteniendo ese orden global.
+
+        La lista completa es obligatoria para evitar colisiones de `position`
+        entre canales de distintos grupos: si se mandaran solo los de una
+        categoría, sus posiciones 0,1,2 colisionarían con las de los otros.
+
+        Pide `MANAGE_CHANNELS`. Devuelve `204` sin cuerpo; el cliente ya
+        aplicó el cambio de forma optimista y solo revierte si falla.
+
+        Si algún id de la lista no pertenece al servidor, responde `400`.
+      operationId: reorderChannels
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+        - $ref: '#/components/parameters/ServerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+                format: uuid
+              description: Lista completa de ids de canales en el orden deseado.
+      responses:
+        '204':
+          description: Posiciones actualizadas.
+        '400':
+          description: Algún id de la lista no pertenece a este servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: El usuario no tiene `MANAGE_CHANNELS`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /servers/{serverId}/categories/:
+    post:
+      summary: Crear una categoría en el servidor (SCRUM-39)
+      description: >
+        CA1 de "Organizar canales en categorías". Crea una categoría nueva,
+        vacía, en el servidor. Se ubica al final de la lista (posición más
+        alta). Pide `MANAGE_CHANNELS`.
+      operationId: createCategory
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+        - $ref: '#/components/parameters/ServerId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryRequest'
+      responses:
+        '201':
+          description: Categoría creada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Category'
+        '403':
+          description: El usuario no tiene `MANAGE_CHANNELS`, o no es miembro del servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Ya existe una categoría con ese nombre en este servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Nombre vacío o de más de 100 caracteres.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /servers/{serverId}/categories/{categoryId}:
+    patch:
+      summary: Renombrar una categoría (SCRUM-39)
+      description: >
+        Renombra la categoría. Pide `MANAGE_CHANNELS`. El nombre se recorta
+        antes de validarse, así que un nombre rodeado de espacios no se rechaza
+        sino que se guarda sin ellos.
+      operationId: renameCategory
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/CategoryId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UpdateCategoryRequest'
+      responses:
+        '200':
+          description: Categoría renombrada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Category'
+        '403':
+          description: El usuario no tiene `MANAGE_CHANNELS`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor o categoría inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Ya existe una categoría con ese nombre en este servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Nombre vacío o de más de 100 caracteres.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Eliminar una categoría (SCRUM-39)
+      description: >
+        Elimina la categoría. Los canales que estaban en ella quedan con
+        `category_id = null` —sin categoría— y no se eliminan. Pide
+        `MANAGE_CHANNELS`.
+      operationId: deleteCategory
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/CategoryId'
+      responses:
+        '204':
+          description: Categoría eliminada. Sus canales quedan sin categoría.
+        '403':
+          description: El usuario no tiene `MANAGE_CHANNELS`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor o categoría inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /servers/{serverId}/categories/reorder:
+    post:
+      summary: Reordenar las categorías del servidor (SCRUM-39)
+      description: >
+        Recibe la lista completa de ids de categorías en el orden deseado y
+        asigna posiciones consecutivas. Mismo contrato que el reorder de
+        canales. Pide `MANAGE_CHANNELS`.
+      operationId: reorderCategories
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+        - $ref: '#/components/parameters/ServerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+                format: uuid
+              description: Lista completa de ids de categorías en el orden deseado.
+      responses:
+        '204':
+          description: Posiciones actualizadas.
+        '400':
+          description: Algún id de la lista no pertenece a este servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: El usuario no tiene `MANAGE_CHANNELS`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /servers/{serverId}/roles/:
     get:
       summary: Listar los roles del servidor
@@ -1167,6 +1407,13 @@ components:
       schema:
         type: string
         format: uuid
+    CategoryId:
+      in: path
+      name: categoryId
+      required: true
+      schema:
+        type: string
+        format: uuid
     RoleId:
       in: path
       name: roleId
@@ -1203,7 +1450,7 @@ components:
       type: object
       required:
         [id, name, description, owner_id, avatar_url, created_at, channels,
-         my_permissions, my_permission_names]
+         categories, my_permissions, my_permission_names]
       properties:
         id:
           type: string
@@ -1236,6 +1483,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Channel'
+        categories:
+          description: >
+            Las categorías del servidor, ordenadas por `position` ascendente
+            (SCRUM-39). Lista vacía si no se creó ninguna. Los canales se
+            asignan a una categoría a través de `category_id` en `Channel`.
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
         my_permissions:
           description: >
             Los permisos de quien pidió el servidor, ya resueltos: el OR de
@@ -1270,19 +1525,22 @@ components:
             Server.iconUrl.
 
     Channel:
+      description: >
+        Los nombres de los campos son snake_case, igual que en `Server`. Ver
+        nota en ese schema sobre la deuda INF-01.
       type: object
-      required: [id, serverId, name, type, topic, categoryId, createdAt]
+      required: [id, server_id, name, type, topic, category_id, position, created_at]
       properties:
         id:
           type: string
           format: uuid
-        serverId:
+        server_id:
           type: string
           format: uuid
         name:
           type: string
           minLength: 1
-          maxLength: 50
+          maxLength: 100
         type:
           type: string
           enum: [text, voice]
@@ -1290,12 +1548,21 @@ components:
           type: string
           maxLength: 200
           nullable: true
-        categoryId:
+        category_id:
           type: string
           format: uuid
           nullable: true
-          description: Null si el canal no está asignado a ninguna categoría (fuera de alcance del Sprint 1; se agrupan todos en "general").
-        createdAt:
+          description: >
+            Null si el canal no está asignado a ninguna categoría. El cliente
+            lo agrupa visualmente en "Canales de texto" o "Canales de voz"
+            según `type`. Se asigna con `PATCH /channels/{channelId}` pasando
+            el UUID de la categoría, o se limpia pasando cadena vacía `""`.
+        position:
+          type: integer
+          description: >
+            Posición global del canal entre todos los canales del servidor.
+            Se actualiza con `POST /channels/reorder` (SCRUM-40).
+        created_at:
           type: string
           format: date-time
 
@@ -1306,10 +1573,15 @@ components:
         name:
           type: string
           minLength: 1
-          maxLength: 50
+          maxLength: 100
         type:
           type: string
           enum: [text, voice]
+        category_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Categoría inicial del canal. Opcional; si se omite el canal queda sin categoría.
 
     UpdateChannelRequest:
       type: object
@@ -1318,10 +1590,17 @@ components:
         name:
           type: string
           minLength: 1
-          maxLength: 50
+          maxLength: 100
         topic:
           type: string
           maxLength: 200
+        category_id:
+          type: string
+          description: >
+            UUID de la categoría a la que se mueve el canal, o cadena vacía
+            `""` para sacarlo de su categoría actual. Si se omite el campo,
+            la categoría no cambia. No es un UUID estricto porque el valor
+            vacío también es válido (SCRUM-39).
 
     Invite:
       type: object
@@ -1592,3 +1871,47 @@ components:
           type: integer
         offset:
           type: integer
+
+    Category:
+      description: >
+        Una categoría de canales dentro de un servidor (SCRUM-39). Los canales
+        que pertenecen a ella lo indican con `category_id`.
+      type: object
+      required: [id, server_id, name, position, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        server_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        position:
+          type: integer
+          description: Orden de la categoría entre las del servidor. Se actualiza con `POST /categories/reorder`.
+        created_at:
+          type: string
+          format: date-time
+
+    CreateCategoryRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Nombre de la categoría. Se recortan los espacios extremos antes de validar.
+
+    UpdateCategoryRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Nuevo nombre de la categoría. Se recortan los espacios extremos antes de validar.
