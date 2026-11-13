@@ -104,6 +104,7 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 |---|---|---|---|---|
 | `identity.user.registered` | `identity` | `metrics` (fan-out) | *A definir por `identity`* | Historia de registro — dueño `identity` |
 | `community.server.created` | `community` | `chat` (avisos de UI, cola por instancia) ⁷, `metrics` (fan-out) | `{ serverId, name, ownerId }` ⁷ | Historia de creación de servidor — dueño `community`; ADR-0017 |
+| `community.server.updated` | `community` | `chat` (avisos de UI, cola por instancia) ⁷, `metrics` (fan-out) | `{ serverId, name }` | SCRUM-32; ADR-0017 |
 | `community.server.deleted` | `community` | `chat` (proyección; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId }` ¹² | SCRUM-84 (productor) y SCRUM-175 (consumidor); ADR-0017 |
 | `community.channel.created` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ channelId, serverId, name, type }` ¹ | SCRUM-137; ADR-0017 |
 | `community.channel.updated` | `community` | `chat` (avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ channelId, serverId, name, type }` ¹ ⁷ | SCRUM-137; ADR-0017 |
