@@ -22,14 +22,15 @@ info:
     mover canales a una categoría vía `PATCH` o drag & drop— y Reordenar
     canales (SCRUM-40) —`POST /channels/reorder` recibe la lista completa de
     ids en el orden deseado y actualiza el campo `position` de cada uno—.
+    Del CP3 cubre Transferir propiedad del servidor (SCRUM-35) y Eliminar rol
+    (SCRUM-64).
 
     Todos los endpoints exitosos devuelven `{ "data": <recurso> }` y todos los
     errores usan RFC 7807 problem+json (`application/problem+json`) con los
     campos `type`, `title`, `status`, `detail` e `instance` (SCRUM-156).
 
-    Siguen fuera de alcance el resto de la épica Servidores (transferir
-    propiedad, administrar configuración) y los permisos por canal del
-    ADR-0012, que se agregan sin romper este contrato.
+    Siguen fuera de alcance administrar la configuración del servidor y los
+    permisos por canal del ADR-0012, que se agregan sin romper este contrato.
 
 servers:
   - url: http://localhost:8002
@@ -150,6 +151,62 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+    patch:
+      summary: Editar la configuración del servidor
+      description: >
+        CA1 (éxito), CA2 (sin permisos) y CA3 (datos inválidos) de "Administrar
+        configuración del servidor" (SCRUM-32).
+
+        Solo los campos presentes se actualizan; omitir un campo deja el valor
+        actual intacto. Pide `MANAGE_SERVER` (ADR-0011); el owner lo tiene
+        siempre.
+
+        El ícono y el banner se suben a Cloudinary: si se envían, `avatar_url` y
+        `banner_url` se actualizan con la URL resultante.
+      operationId: updateServer
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+        - $ref: '#/components/parameters/ServerId'
+      requestBody:
+        required: false
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UpdateServerRequest'
+      responses:
+        '200':
+          description: Servidor con los datos actualizados (CA1).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Server'
+        '403':
+          description: El usuario no tiene `MANAGE_SERVER` o no es miembro del servidor (CA2).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: >
+            Nombre vacío o de más de 100 caracteres, o imagen con formato o
+            tamaño no soportado (CA3). Formatos aceptados: JPEG, PNG, GIF o WEBP,
+            hasta 8 MB.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /servers/{serverId}/members/me:
     delete:
       summary: Abandonar el servidor
@@ -172,6 +229,243 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /servers/{serverId}/ownership-transfer:
+    get:
+      summary: Ver la última transferencia de propiedad del servidor
+      description: >
+        SCRUM-35. Devuelve la transferencia más reciente del servidor, con su
+        `status`. Mientras está `pending`, el owner ve a quién se la propuso
+        y puede cancelarla. Cuando el destinatario la rechaza pasa a
+        `rejected`, y es lo que le permite al owner mostrar que la rechazó,
+        distinto de una cancelación (`cancelled`). Solo lo ve el owner: el
+        destinatario ve las suyas con `GET /users/me/ownership-transfers`. El
+        cliente lo vuelve a pedir cuando le llega el aviso
+        `ownershipTransfers` (ADR-0017).
+      operationId: getOwnershipTransfer
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: La transferencia más reciente del servidor.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OwnershipTransfer'
+        '403':
+          description: Quien pide no es el owner del servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor inexistente, o el servidor nunca tuvo una transferencia.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Proponer la propiedad del servidor a otro miembro
+      description: >
+        Primer paso de "Transferir propiedad del servidor" (SCRUM-35, D6).
+        Crea una transferencia **pendiente**: la propiedad no cambia hasta
+        que el destinatario la acepte (CA1) y no cambia si la rechaza (CA3).
+        Hay como mucho una pendiente por servidor; para proponérsela a otro,
+        el owner cancela la actual primero. Las ya resueltas no cuentan.
+
+
+        La pendiente pasa a `cancelled` sola, en la misma transacción, si el
+        destinatario deja de ser miembro (abandona, lo expulsan o lo banean),
+        así que nunca queda una transferencia pendiente hacia alguien que no
+        es miembro (CA2). Si el servidor se elimina, sus transferencias se
+        borran con él.
+
+
+        Publica `community.server.ownership-transfer-changed` para que al
+        destinatario y al owner les llegue el aviso al instante (ver
+        `arquitectura/eventos.md`).
+      operationId: createOwnershipTransfer
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOwnershipTransferRequest'
+      responses:
+        '201':
+          description: La transferencia quedó pendiente de la respuesta del destinatario.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OwnershipTransfer'
+        '403':
+          description: Quien pide no es el owner del servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Ya hay una transferencia `pending` en este servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: >
+            `to_user_id` no es miembro del servidor (CA2), es el propio owner,
+            o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Cancelar la transferencia de propiedad pendiente
+      description: >
+        SCRUM-35 (D6). La cancela el owner: la pendiente pasa a `cancelled`.
+        Es idempotente: si no hay nada pendiente responde `204` igual, porque el resultado que se pide (que
+        no haya transferencia) ya se cumple. Publica
+        `community.server.ownership-transfer-changed` solo si había una.
+      operationId: cancelOwnershipTransfer
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '204':
+          description: No queda ninguna transferencia pendiente.
+        '403':
+          description: Quien pide no es el owner del servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /servers/{serverId}/ownership-transfer/acceptance:
+    post:
+      summary: Aceptar la propiedad del servidor
+      description: >
+        CA1 de "Transferir propiedad del servidor" (SCRUM-35). Lo hace el
+        destinatario. En una sola transacción, el destinatario pasa a ser el
+        owner y la transferencia pasa a `accepted`. El owner anterior queda como miembro
+        regular, con los roles que ya tenía: los permisos de owner salen de
+        serlo y no de un rol (ADR-0011), así que los pierde sin tocar ninguna
+        asignación.
+
+
+        Publica `community.server.ownership-transferred` y
+        `community.member.permissions-changed` con los permisos de los dos.
+
+
+        Es idempotente: si no hay nada pendiente y quien pide ya es el owner,
+        responde `204`, así un reintento después de aceptar no falla. Si la
+        pendiente es para otro usuario responde `403`, por ejemplo cuando el
+        owner canceló y se la propuso a otra persona mientras el destinatario
+        tenía el aviso abierto: el cliente vuelve a pedir
+        `GET /users/me/ownership-transfers`.
+      operationId: acceptOwnershipTransfer
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '204':
+          description: Quien pide es el owner del servidor (CA1).
+        '403':
+          description: La transferencia pendiente es para otro usuario.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: >
+            Servidor inexistente, o no hay ninguna transferencia pendiente y
+            quien pide no es el owner.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /servers/{serverId}/ownership-transfer/rejection:
+    post:
+      summary: Rechazar la propiedad del servidor
+      description: >
+        CA3 de "Transferir propiedad del servidor" (SCRUM-35). Lo hace el
+        destinatario. La transferencia pasa a `rejected` y la propiedad no
+        cambia. Publica `community.server.ownership-transfer-changed`, y el
+        owner ve el rechazo al volver a pedir
+        `GET /servers/{serverId}/ownership-transfer`.
+
+
+        Es idempotente: si no hay nada pendiente responde `204`, porque el
+        resultado que se pide (que la propiedad no cambie) ya se cumple. Si
+        la pendiente es para otro usuario responde `403`.
+      operationId: rejectOwnershipTransfer
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '204':
+          description: No queda ninguna transferencia pendiente para quien pide (CA3).
+        '403':
+          description: La transferencia pendiente es para otro usuario.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/ownership-transfers:
+    get:
+      summary: Listar las transferencias de propiedad que esperan mi respuesta
+      description: >
+        SCRUM-35 (D6). Las transferencias `pending` en las que quien pide es
+        el destinatario, una por servidor como mucho. El cliente las muestra
+        como un aviso en la app, porque no hay centro de notificaciones, y
+        las vuelve a pedir cuando le llega el aviso
+        `ownershipTransfers` (ADR-0017).
+      operationId: listMyOwnershipTransfers
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+      responses:
+        '200':
+          description: Las transferencias pendientes para quien pide; lista vacía si no hay.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OwnershipTransfer'
 
   /servers/{serverId}/members/:
     get:
@@ -1193,6 +1487,72 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Eliminar un rol
+      description: >
+        CA1 y CA2 de "Eliminar rol" (SCRUM-64), y CA2 de "Definir rol por
+        defecto" (SCRUM-63).
+
+
+        Borra el rol y sus asignaciones, así que quienes lo tenían dejan de
+        contar con los permisos que daba (CA1). Publica
+        `community.member.permissions-changed` con los permisos ya resueltos
+        de esos miembros, si había alguno (D7). Publica siempre
+        `community.role.deleted` con `serverId` y `roleId`, aunque nadie
+        tuviera el rol, para que todos los miembros vean desaparecer el rol
+        sin recargar (ADR-0017).
+
+
+        Las posiciones de los demás roles no cambian. Queda un hueco, y no
+        importa: la jerarquía solo compara posiciones.
+
+
+        El orden de los chequeos define qué código llega: `MANAGE_ROLES`
+        (403), rol inexistente (404), jerarquía (403), rol por defecto (409)
+        y por último quedarse sin `ADMINISTRATOR` (409).
+      operationId: deleteRole
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+      responses:
+        '204':
+          description: El rol se eliminó (CA1).
+        '403':
+          description: >
+            Quien pide no tiene `MANAGE_ROLES` (CA2), o el rol está en su misma
+            posición o por encima en la jerarquía (D7). El owner no pasa por la
+            jerarquía.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor o rol inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >
+            Dos motivos, cada uno con su mensaje:
+
+
+            1. Es el rol por defecto del servidor. Se puede eliminar después
+            de elegir otro con `PUT .../roles/{roleId}/default` (CA2 de
+            SCRUM-63).
+
+
+            2. Es la única fuente de `ADMINISTRATOR` de quien lo elimina: el
+            servidor quedaría sin nadie que pueda administrarlo. Es la misma
+            regla que el `409` de `PATCH`, y como ahí se mira el resultado
+            efectivo: si otro rol le sigue dando `ADMINISTRATOR`, se elimina.
+            El owner nunca llega a este caso: sus permisos salen de ser owner
+            y no de un rol.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /servers/{serverId}/roles/{roleId}/default:
     put:
@@ -1371,6 +1731,44 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /admin/servers/{serverId}:
+    delete:
+      summary: Eliminar Servidor (backoffice)
+      description: >
+        Solo staff: responde 403 si `X-User-Role` no es `staff` (el chequeo se evalúa antes que la validación del `serverId`).
+        La eliminación es permanente: se eliminan los canales, miembros, invitaciones, roles y baneos del servidor.
+        Publica `community.server.deleted` con `{ serverId }`; con ese evento `chat` borra los mensajes del servidor (SCRUM-175).
+      operationId: deleteServerForAdmin
+      parameters:
+        - $ref: '#/components/parameters/XUserRole'
+        - name: serverId
+          in: path
+          required: true
+          description: Identificador único del servidor
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Servidor eliminado exitosamente. No devuelve contenido.
+        '403':
+          description: El usuario autenticado no tiene rol de staff
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El servidor no fue encontrado
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Parámetros de eliminación inválidos.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   parameters:
     XUserId:
@@ -1449,8 +1847,8 @@ components:
         `camelCase` y queda como deuda de INF-01.
       type: object
       required:
-        [id, name, description, owner_id, avatar_url, created_at, channels,
-         categories, my_permissions, my_permission_names]
+        [id, name, description, owner_id, avatar_url, banner_url, created_at,
+         channels, categories, my_permissions, my_permission_names]
       properties:
         id:
           type: string
@@ -1469,6 +1867,12 @@ components:
           description: >
             Se llama `avatar_url` y no `iconUrl`: no es solo la convención de
             nombres, es otro nombre de campo.
+          type: string
+          format: uri
+          nullable: true
+        banner_url:
+          description: >
+            Banner del servidor. Null si no se subió ninguno.
           type: string
           format: uri
           nullable: true
@@ -1506,6 +1910,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Permission'
+
+    UpdateServerRequest:
+      type: object
+      description: Todos los campos son opcionales; se actualizan solo los presentes.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+        icon:
+          type: string
+          format: binary
+          description: >
+            Ícono del servidor. JPEG, PNG, GIF o WEBP, hasta 8 MB. Se sube a
+            Cloudinary y actualiza `avatar_url`.
+        banner:
+          type: string
+          format: binary
+          description: >
+            Banner del servidor. JPEG, PNG, GIF o WEBP, hasta 8 MB. Se sube a
+            Cloudinary y actualiza `banner_url`.
 
     CreateServerRequest:
       type: object
@@ -1782,6 +2209,53 @@ components:
         joined_at:
           type: string
           format: date-time
+
+    OwnershipTransfer:
+      description: >
+        Una transferencia de propiedad (SCRUM-35, D6). Hay como mucho una
+        `pending` por servidor. Al resolverse no se borra: queda con su
+        `status`, para que el owner sepa cómo terminó. Sin nombres ni avatares de los usuarios, que son de
+        `identity`; sí con el nombre del servidor, para que el destinatario
+        pueda mostrar el aviso sin pedirlo aparte.
+      type: object
+      required: [server_id, server_name, from_user_id, to_user_id, status, created_at, resolved_at]
+      properties:
+        server_id:
+          type: string
+          format: uuid
+        server_name:
+          type: string
+        from_user_id:
+          type: string
+          format: uuid
+          description: El owner que la propuso.
+        to_user_id:
+          type: string
+          format: uuid
+          description: El miembro que tiene que aceptarla o rechazarla.
+        status:
+          type: string
+          enum: [pending, accepted, rejected, cancelled]
+          description: >
+            `cancelled` es tanto la cancelación del owner como la automática,
+            cuando el destinatario deja de ser miembro.
+        created_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Cuándo dejó de estar `pending`; `null` mientras lo está.
+
+    CreateOwnershipTransferRequest:
+      type: object
+      required: [to_user_id]
+      properties:
+        to_user_id:
+          type: string
+          format: uuid
+          description: Un miembro del servidor que no sea el owner (CA2).
 
     ServerMember:
       description: >
