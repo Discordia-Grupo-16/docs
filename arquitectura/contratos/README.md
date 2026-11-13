@@ -52,8 +52,8 @@ INF-01 porque atraviesa historias de varias personas.
 | Qué dicen estos archivos | Qué hace el código | Dónde |
 |---|---|---|
 | Campos en `camelCase` (`serverId`, `createdAt`) | `snake_case` (`server_id`, `created_at`) | `Channel`, `Invite`, `InvitePreview`, `PublicServer` |
-| Envelope `{ "data": ... }` en toda respuesta con body | `identity` lo hace; `community` devuelve el objeto pelado | Todas las respuestas de `community.yaml` |
-| Errores en `application/problem+json` con `ErrorResponse` | `community` devuelve el `{"detail": ...}` de FastAPI; el gateway sí traduce a problem+json | Todas las respuestas de error de `community.yaml` |
+| Envelope `{ "data": ... }` en toda respuesta con body | ✅ Resuelto en SCRUM-156: `community` ya envuelve todas las respuestas | Todas las respuestas de `community.yaml` |
+| Errores en `application/problem+json` con `ErrorResponse` | ✅ Resuelto en SCRUM-156: `community` ya tiene handler RFC 7807 equivalente al de `identity` | Todas las respuestas de error de `community.yaml` |
 | `X-User-Role`, `required: true` | El gateway lo manda bien desde SCRUM-85, pero `community` no lo lee: su `get_current_user` solo mira `X-User-Id` | Parámetro `XUserRole` |
 | Paths de colección sin barra final (`/servers/{serverId}/channels`) | El gateway los enruta con barra y chi no redirige: la forma documentada responde **404** | `community.yaml` y `api-gateway.yaml` |
 | `/servers/{serverId}/invites` | Implementado como `/servers/{serverId}/invitations` | Los dos archivos |
