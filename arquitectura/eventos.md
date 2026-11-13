@@ -90,7 +90,7 @@ Sobre ese exchange hay dos formas de declarar una cola, y **no son intercambiabl
 - **Cola por instancia** para `chat.message.sent`: cada instancia tiene un conjunto distinto de clientes WebSocket conectados, así que cada una necesita enterarse de **todos** los mensajes para reenviárselos a los suyos.
 - **Cola por instancia** para `chat.voice.participants-changed` (SCRUM-54): el webhook de LiveKit llega a una sola instancia, pero los clientes que miran la lista de participantes están conectados a cualquiera, así que cada instancia tiene que enterarse de **todos** los cambios para reenviárselos a los suyos. Es el mismo problema y la misma solución que `chat.message.sent`.
 - **Cola por instancia** para `identity.user.suspended`: los sockets del usuario suspendido pueden estar en cualquier instancia, así que todas tienen que enterarse para cerrar los suyos.
-- **Cola compartida** `chat.voice-access` para cortar las llamadas de voz de quien pierde el acceso (SCRUM-51): se bindea a `community.member.left`, `community.channel.deleted`, `community.member.permissions-changed` e `identity.user.suspended`. Es compartida porque sacar a alguien de una sala de LiveKit es una sola llamada al proveedor, que tiene que hacer una sola instancia. Solo corta sesiones de voz registradas **antes** del `occurredAt` del evento, así un evento atrasado no corta una unión nueva y un duplicado no encuentra nada que cortar.
+- **Cola compartida** `chat.voice-access` para cortar las llamadas de voz de quien pierde el acceso (SCRUM-51): se bindea a `community.member.left`, `community.channel.deleted`, `community.server.deleted`, `community.member.permissions-changed` e `identity.user.suspended`. Es compartida porque sacar a alguien de una sala de LiveKit es una sola llamada al proveedor, que tiene que hacer una sola instancia. Los eventos por usuario cortan sesiones registradas **antes** del `occurredAt`; el borrado de canal o servidor elimina la sala completa y sus sesiones.
 - **Cola por instancia** para `chat.membership.changed`, el relevo interno de membresías: la instancia que aplica un `member.joined` o `.left` a la proyección no sabe cuál tiene al usuario conectado, así que avisa a todas y cada una actualiza las suscripciones de sus propias conexiones.
 - **Cola por instancia** para `chat.read-state.updated` (SCRUM-76): la instancia que atiende el `PUT` de lectura no sabe en cuál está conectada la otra sesión del mismo usuario, así que avisa a todas y cada una empuja el frame a las conexiones de ese `userId` que tiene.
 
@@ -104,6 +104,7 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 |---|---|---|---|---|
 | `identity.user.registered` | `identity` | `metrics` (fan-out) | *A definir por `identity`* | Historia de registro — dueño `identity` |
 | `community.server.created` | `community` | `chat` (avisos de UI, cola por instancia) ⁷, `metrics` (fan-out) | `{ serverId, name, ownerId }` ⁷ | Historia de creación de servidor — dueño `community`; ADR-0017 |
+| `community.server.deleted` | `community` | `chat` (proyección; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId }` ¹² | SCRUM-84 (productor) y SCRUM-175 (consumidor); ADR-0017 |
 | `community.channel.created` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ channelId, serverId, name, type }` ¹ | SCRUM-137; ADR-0017 |
 | `community.channel.updated` | `community` | `chat` (avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ channelId, serverId, name, type }` ¹ ⁷ | SCRUM-137; ADR-0017 |
 | `community.channel.deleted` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ channelId, serverId }` ¹ ⁷ | SCRUM-137; ADR-0017 |
@@ -178,7 +179,7 @@ Y las que agrega `channelOverrides` (ADR-0012):
 ⁷ Avisos de UI ([ADR-0017](../adr/0017-eventos-de-ui-por-el-websocket.md), SCRUM-167). Cada instancia de `chat` traduce estos eventos a un frame `invalidate` para sus clientes conectados, que vuelven a pedir por HTTP lo que quedó viejo. El frame no lleva datos de `community` ni de `identity`, y la tabla de qué evento genera qué aviso está en el ADR.
 
 - **Cola por instancia, y propia.** Cada instancia tiene sus propias conexiones, así que todas tienen que ver cada evento: con una cola compartida lo recibiría una sola. Va aparte de la cola de la proyección (que sí es compartida, porque escribe en un Mongo único) y de la de mensajes, para que una lectura lenta no demore los broadcasts. Como RabbitMQ le entrega una copia a cada cola bindeada, que esta cola exista no le saca nada a la proyección.
-- **No escribe en Mongo.** Solo `identity.user.profile-updated` lee la proyección, para saber los servidores del usuario.
+- **Lecturas de proyección.** `identity.user.profile-updated` lee los servidores del usuario. `community.server.deleted` lee los miembros capturados en el tombstone para enviar la invalidación por usuario, aunque un relevo de membresía atrasado ya haya quitado sus suscripciones al servidor.
 - **Idempotencia:** igual que `profile-updated` (nota ⁶), un duplicado o un evento fuera de orden repite un aviso que provoca una relectura. No hay `lastEventAt` que mantener.
 - **Los payloads de esta fila salen de lo que `community` publica hoy.** `server.created` lleva `{ serverId, name, ownerId }`, y `channel.updated` y `channel.deleted` llevan `serverId`, que el catálogo no listaba y que el consumidor necesita para saber a quiénes avisar. Un consumidor que no use el campo lo ignora.
 - **Requisito para los productores:** el evento se publica **después del commit**. Si no, el cliente relee antes de que el dato exista.
@@ -204,6 +205,10 @@ Y las que agrega `channelOverrides` (ADR-0012):
 
 ¹¹ **Eliminación de un rol** (SCRUM-64). Se publica **después del commit** y **siempre**, aunque nadie tuviera el rol: es lo que les avisa a todos los miembros que el rol ya no está. Si alguien lo tenía, va además `community.member.permissions-changed` con los permisos ya recalculados de esos miembros.
    - **Idempotencia:** igual que los avisos de la nota ⁷, un duplicado o un evento fuera de orden repite un aviso que provoca una relectura. Eliminar un rol que ya no existe responde `404` y no publica nada.
+
+¹² **Eliminación de un servidor** (SCRUM-84 y SCRUM-175). `community` lo publica **después del commit**, al eliminar un servidor desde el backoffice. Es **permanente**: la proyección de `chat` borra los canales, las membresías y **todos los mensajes** del servidor, y guarda un tombstone en `deletedServers` con los miembros activos en ese momento.
+   - **Idempotencia:** el tombstone se crea una sola vez (`$setOnInsert`) y un evento atrasado de ese servidor no lo vuelve a habilitar. Un duplicado vuelve a borrar lo que quede, que ya no es nada.
+   - **Avisos de UI:** van a cada miembro guardado en el tombstone, con `server` y `servers`, así no dependen del orden con los relevos de membresía (nota ⁷).
 
 ## Nota sobre los dos lenguajes
 
