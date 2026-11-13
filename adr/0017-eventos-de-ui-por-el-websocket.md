@@ -1,6 +1,6 @@
 # ADR-0017: Eventos de UI por el WebSocket de `chat`, en lugar del polling del front
 
-- **Estado:** Aceptado. Modificado parcialmente por el [ADR-0019](0019-suscripcion-a-avisos-separada-de-mensajes.md) (a quién llegan los avisos de servidor)
+- **Estado:** Reemplazado parcialmente por [ADR-0019](0019-suscripcion-a-avisos-separada-de-mensajes.md)
 - **Fecha:** 2026-11-01
 - **Decisores:** Persona 2 (dueña de INF-30 en el CP3), como implementadora de la decisión D17 del
   Anexo A del plan del sprint. La gestiona y la acepta quien la escribe, que es lo que el plan
@@ -8,6 +8,20 @@
   la discusión.
 - **Servicios afectados:** `chat-and-real-time`, `web-app` (web y mobile). `community` e `identity`
   solo como productores de eventos, algunos que ya publican y otros que van a publicar.
+
+> **Qué sigue vigente y qué no.** El [ADR-0019](0019-suscripcion-a-avisos-separada-de-mensajes.md) cambió a quién le llegan los avisos de servidor.
+>
+> - **Queda sin efecto:** que los avisos de servidor salen por `Broadcast(serverId)` y llegan solo a
+>   los miembros con `VIEW_CHANNEL` ("A quién llega"), y que un miembro sin ese permiso depende del
+>   respaldo de 60 segundos ("Consecuencias"). Desde el ADR-0019 cada conexión tiene una suscripción
+>   a avisos aparte, con todos los servidores donde el usuario es miembro activo, y los avisos de
+>   servidor salen por `BroadcastNotice(serverId)`. El aviso de cambio de perfil tampoco filtra por
+>   `VIEW_CHANNEL`.
+> - **Sigue vigente:** todo lo demás. El frame `invalidate` y sus campos, qué evento produce cada
+>   aviso, `SendToUser` para los avisos a un usuario, el consumidor por instancia, el agrupado y el
+>   retraso del cliente, y el respaldo de 60 segundos para lo que no tiene evento.
+>
+> El resto del documento se conserva sin editar, salvo las marcas que apuntan al ADR-0019.
 
 > Este ADR **no modifica** ningún ADR anterior. Se apoya en el socket y el hub de `chat` que el
 > [ADR-0008](0008-proxy-websocket-como-excepcion-al-adr-0002.md) ya puso detrás del gateway, y

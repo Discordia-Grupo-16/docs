@@ -1,13 +1,13 @@
 # ADR-0019: Suscripción a avisos separada de la de mensajes en `chat`
 
-- **Estado:** Propuesto
-- **Fecha:** 2026-11-11
+- **Estado:** Aceptado
+- **Fecha:** 2026-11-12
 - **Decisores:** Persona 4, con la aprobación de la Persona 2 (dueña de INF-30 y del
   [ADR-0017](0017-eventos-de-ui-por-el-websocket.md)).
 - **Servicios afectados:** `chat-and-real-time`. Los clientes (`web-app`, web y mobile) no cambian:
   reciben los mismos avisos, ahora también en los servidores donde no tienen `VIEW_CHANNEL`.
 
-> Este ADR **modifica parcialmente** el [ADR-0017](0017-eventos-de-ui-por-el-websocket.md): cambia a
+> Este ADR **reemplaza parcialmente** el [ADR-0017](0017-eventos-de-ui-por-el-websocket.md): cambia a
 > quién le llegan los avisos de servidor. El resto del ADR-0017 sigue vigente.
 
 ## Contexto
@@ -18,9 +18,9 @@ suscriptas a ese servidor, y una conexión se suscribe solo a los servidores don
 `VIEW_CHANNEL`. Así tiene que ser para los mensajes: quien no ve los canales no tiene que recibirlos.
 
 Para los avisos, ese filtro deja afuera a miembros que sí tienen que enterarse. El ADR-0017 lo
-aceptó como costo: un miembro sin `VIEW_CHANNEL` depende del respaldo de 60 segundos. Eliminar un
-rol (SCRUM-64) pide que el rol desaparezca para **todos** los miembros del servidor en hasta
-5 segundos, y ese miembro también ve la lista de roles y la de miembros. Lo mismo pasa con el aviso
+aceptó como costo: un miembro sin `VIEW_CHANNEL` depende del respaldo de 60 segundos. Al eliminar
+un rol (SCRUM-64), el rol tiene que desaparecer para **todos** los miembros del servidor, y ese
+miembro también ve la lista de roles y la de miembros. Lo mismo pasa con el aviso
 de cambio de perfil: hoy solo llega a los servidores donde el dueño del perfil tiene `VIEW_CHANNEL`.
 
 ## Opciones consideradas
