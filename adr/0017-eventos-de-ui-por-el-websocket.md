@@ -189,6 +189,7 @@ cuando cambia su perfil.
 | `community.server.layout-updated` | No (`community`) | Servidor | `channels` |
 | `community.server.updated` | No (`community`) | Servidor | `server` |
 | `community.server.deleted` | Sí | Cada miembro activo al eliminarlo (los guarda el tombstone de `chat`) | `server` y `servers` |
+| `community.server.suspended` y `reactivated` | Sí | Cada miembro activo del servidor | `server` y `servers` |
 | `community.server.ownership-transferred` | No (`community`) | Servidor | `server` |
 | `community.server.ownership-transfer-changed` | No (`community`) | El destinatario y el owner | `ownershipTransfers` |
 | `community.role.deleted` | No (`community`) | Servidor | `roles` y `members` |
