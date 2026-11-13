@@ -1148,6 +1148,75 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /admin/servers/{serverId}/suspension:
+    post:
+      summary: Suspender servidor (backoffice)
+      description: >
+        Solo staff. Actualiza el estado del servidor y publica
+        `community.server.suspended` después de guardar el cambio.
+      operationId: suspendServerForAdmin
+      parameters:
+        - $ref: '#/components/parameters/XUserRole'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Servidor suspendido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminServer'
+        '403':
+          description: El usuario autenticado no tiene rol de staff.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El servidor no fue encontrado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Identificador del servidor inválido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Reactivar servidor (backoffice)
+      description: >
+        Solo staff. Elimina la suspensión del servidor y publica
+        `community.server.reactivated` después de guardar el cambio.
+      operationId: reactivateServerForAdmin
+      parameters:
+        - $ref: '#/components/parameters/XUserRole'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Servidor reactivado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminServer'
+        '403':
+          description: El usuario autenticado no tiene rol de staff.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El servidor no fue encontrado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Identificador del servidor inválido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   parameters:
     XUserId:
@@ -1596,7 +1665,7 @@ components:
     AdminServer:
       type: object
       description: Vista de staff de un servidor. No incluye datos profundos como canales o roles.
-      required: [ id, name, memberCount, createdAt ]
+      required: [ id, name, memberCount, createdAt, is_suspended ]
       properties:
         id:
           type: string
@@ -1609,6 +1678,9 @@ components:
         createdAt:
           type: string
           format: date-time
+        is_suspended:
+          type: boolean
+          description: Indica si el servidor está suspendido.
 
     PaginationMeta:
       type: object
