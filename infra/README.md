@@ -120,7 +120,7 @@ Esta variante **no se usa para la demo frente al corrector** — ahí corre solo
 `chat-service` (y `chat-service-2` en la variante multichat) firma tokens con `LIVEKIT_URL`, `LIVEKIT_API_KEY` y `LIVEKIT_API_SECRET` del `.env` de `chat-and-real-time` (ver su `.env.example`), y `livekit` arranca con `--node-ip` = `LIVEKIT_NODE_IP`.
 
 - **LiveKit local** (lo normal). Claves públicas del modo dev (`devkey`/`secret`). `LIVEKIT_NODE_IP` y `LIVEKIT_URL` llevan la IP de esta máquina en la red, **nunca `127.0.0.1` ni `localhost`**: los navegadores descartan esa dirección para el audio y la unión termina en "La voz no está disponible en este momento". Si la IP cambia (otra red, DHCP), actualizá ese `.env` y volvé a levantar. Con esa IP también se conecta un teléfono en el mismo Wi-Fi.
-- **LiveKit Cloud.** La URL `wss://` y las claves del proyecto, que son secretos ([ADR-0007](../adr/0007-gestion-de-secretos.md)). `LIVEKIT_NODE_IP` sigue siendo obligatoria: el `livekit` local se levanta igual, aunque no se use.
+- **LiveKit Cloud.** La URL `wss://` y las claves del proyecto, que son secretos ([ADR-0015](../adr/0015-gestion-de-configuracion.md)). `LIVEKIT_NODE_IP` sigue siendo obligatoria: el `livekit` local se levanta igual, aunque no se use.
 
 Para probar:
 
