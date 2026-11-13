@@ -104,7 +104,7 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 |---|---|---|---|---|
 | `identity.user.registered` | `identity` | `metrics` (fan-out) | *A definir por `identity`* | Historia de registro — dueño `identity` |
 | `community.server.created` | `community` | `chat` (avisos de UI, cola por instancia) ⁷, `metrics` (fan-out) | `{ serverId, name, ownerId }` ⁷ | Historia de creación de servidor — dueño `community`; ADR-0017 |
-| `community.server.deleted` | `community` | `chat` (proyección; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId }` | SCRUM-137; ADR-0017 |
+| `community.server.deleted` | `community` | `chat` (proyección; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId }` ¹² | SCRUM-84 (productor) y SCRUM-175 (consumidor); ADR-0017 |
 | `community.channel.created` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ channelId, serverId, name, type }` ¹ | SCRUM-137; ADR-0017 |
 | `community.channel.updated` | `community` | `chat` (avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ channelId, serverId, name, type }` ¹ ⁷ | SCRUM-137; ADR-0017 |
 | `community.channel.deleted` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ channelId, serverId }` ¹ ⁷ | SCRUM-137; ADR-0017 |
@@ -205,6 +205,10 @@ Y las que agrega `channelOverrides` (ADR-0012):
 
 ¹¹ **Eliminación de un rol** (SCRUM-64). Se publica **después del commit** y **siempre**, aunque nadie tuviera el rol: es lo que les avisa a todos los miembros que el rol ya no está. Si alguien lo tenía, va además `community.member.permissions-changed` con los permisos ya recalculados de esos miembros.
    - **Idempotencia:** igual que los avisos de la nota ⁷, un duplicado o un evento fuera de orden repite un aviso que provoca una relectura. Eliminar un rol que ya no existe responde `404` y no publica nada.
+
+¹² **Eliminación de un servidor** (SCRUM-84 y SCRUM-175). `community` lo publica **después del commit**, al eliminar un servidor desde el backoffice. Es **permanente**: la proyección de `chat` borra los canales, las membresías y **todos los mensajes** del servidor, y guarda un tombstone en `deletedServers` con los miembros activos en ese momento.
+   - **Idempotencia:** el tombstone se crea una sola vez (`$setOnInsert`) y un evento atrasado de ese servidor no lo vuelve a habilitar. Un duplicado vuelve a borrar lo que quede, que ya no es nada.
+   - **Avisos de UI:** van a cada miembro guardado en el tombstone, con `server` y `servers`, así no dependen del orden con los relevos de membresía (nota ⁷).
 
 ## Nota sobre los dos lenguajes
 

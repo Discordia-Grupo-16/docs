@@ -21,7 +21,8 @@
 >   aviso, `SendToUser` para los avisos a un usuario, el consumidor por instancia, el agrupado y el
 >   retraso del cliente, y el respaldo de 60 segundos para lo que no tiene evento.
 >
-> El resto del documento se conserva sin editar, salvo las marcas que apuntan al ADR-0019.
+> El resto del documento se conserva sin editar, salvo las marcas que apuntan al ADR-0019 y la
+> tabla de qué evento produce cada aviso, que se mantiene al día.
 
 > Este ADR **no modifica** ningún ADR anterior. Se apoya en el socket y el hub de `chat` que el
 > [ADR-0008](0008-proxy-websocket-como-excepcion-al-adr-0002.md) ya puso detrás del gateway, y
@@ -187,7 +188,7 @@ cuando cambia su perfil.
 | `identity.user.profile-updated` | No (`identity`) | El usuario; sus servidores | `profile`; `members` con `userId` |
 | `community.server.layout-updated` | No (`community`) | Servidor | `channels` |
 | `community.server.updated` | No (`community`) | Servidor | `server` |
-| `community.server.deleted` | No (`community`) | Servidor | `servers` |
+| `community.server.deleted` | Sí | Cada miembro activo al eliminarlo (los guarda el tombstone de `chat`) | `server` y `servers` |
 | `community.server.ownership-transferred` | No (`community`) | Servidor | `server` |
 | `community.server.ownership-transfer-changed` | No (`community`) | El destinatario y el owner | `ownershipTransfers` |
 | `community.role.deleted` | No (`community`) | Servidor | `roles` y `members` |
@@ -257,9 +258,9 @@ exista, relee, y se queda con el estado viejo hasta el siguiente aviso.
   rol, editar sus permisos y marcarlo por defecto, igual que el desbaneo, no tienen evento y siguen
   con el respaldo de 60 segundos hasta que lo tengan.
 - Los eventos que marca la tabla como inexistentes los publican sus dueños: `layout-updated` y
-  `server.updated` (`community`, organización del servidor), `server.deleted` (`community`,
-  backoffice), los de la transferencia de propiedad (`community`) y `profile-updated` (`identity`,
-  que ya figura en el catálogo pero todavía no se publica).
+  `server.updated` (`community`, organización del servidor), los de la transferencia de propiedad
+  (`community`) y `profile-updated` (`identity`, que ya figura en el catálogo pero todavía no se
+  publica).
 - `ActiveServers` filtra por `VIEW_CHANNEL` del usuario que cambió su perfil (resuelto por el
   [ADR-0019](0019-suscripcion-a-avisos-separada-de-mensajes.md)). Si se quiere que lo
   vean también los servidores donde no tiene ese permiso, hace falta una consulta sin ese filtro.
