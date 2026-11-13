@@ -1,14 +1,14 @@
 # ADR-0018: Recupero de contraseña, segundo factor y ticket de un solo uso del WebSocket
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado
 - **Fecha:** 2026-11-07
 - **Decisores:** Felipe Abad Mustillo (Persona 6, dueño de SCRUM-20, SCRUM-23 y SCRUM-150). Baja a detalle las decisiones D10, D11 y D13 del Anexo A del plan del sprint 3; el taller de contratos del 29/10 aprobó los cambios que se listan en "Qué cambia respecto del plan".
 - **Servicios afectados:** `identity` (recupero y 2FA), `api-gateway` (rutas, límites por IP y ticket), `web-app` (web y mobile), `chat-and-real-time` solo como destino del WebSocket.
 
 > Este ADR es **transversal** porque trata de autenticación y cruza servicios (regla de ruteo de
 > `CONTRIBUTING.md`). El número 0018 se reserva al abrir el PR: 0016 y 0017 ya son de Tomás y de
-> Luis. Cuando se acepte, el [ADR-0008](0008-proxy-websocket-como-excepcion-al-adr-0002.md) pasa de
-> `Propuesto` a `Aceptado` con el ticket en lugar del `access_token`; **este ADR no lo reemplaza**,
+> Luis. Cuando se cierre la transición del ticket, el [ADR-0008](0008-proxy-websocket-como-excepcion-al-adr-0002.md)
+> pasa de `Propuesto` a `Aceptado` con el ticket en lugar del `access_token`; **este ADR no lo reemplaza**,
 > lo completa en el punto de cómo se autentica el handshake.
 
 ## Contexto
@@ -273,7 +273,7 @@ El taller del 29/10 aprobó estos cambios sobre D10, D11 y D13:
 **Qué queda pendiente por esta decisión**
 
 - Implementar el ticket (SCRUM-150) y cerrar la transición con `WS_ALLOW_QUERY_TOKEN=false`; recién ahí
-  este ADR pasa a `Aceptado` y el ADR-0008 también.
+  el ADR-0008 pasa a `Aceptado`.
 - El login con Google (SCRUM-21, ideal) usa el mismo `mfaRequired` pero no se decide acá: si entra, va en
   su propio ADR o en una enmienda de este.
 - Que las cuentas sin contraseña (las de Google) puedan desactivar el 2FA: hoy `disable` pide la
