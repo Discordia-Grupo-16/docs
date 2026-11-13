@@ -1117,7 +1117,10 @@ paths:
     delete:
       summary: Eliminar Servidor (backoffice)
       description: >
-        Solo staff: responde 403 si `X-User-Role` no es `staff` (el chequeo se evalúa antes que la validación de los query params). La eliminacion es permamente, se eliminan canales, miembros, invitaciones, roles y baneos asociados al servidor.
+        Solo staff: responde 403 si `X-User-Role` no es `staff` (el chequeo se evalúa antes que la validación del `serverId`).
+        La eliminación es permanente: se eliminan los canales, miembros, invitaciones, roles y baneos del servidor.
+        Publica `community.server.deleted` con `{ serverId }`; con ese evento `chat` borra los mensajes del servidor (SCRUM-175).
+      operationId: deleteServerForAdmin
       parameters:
         - $ref: '#/components/parameters/XUserRole'
         - name: serverId
