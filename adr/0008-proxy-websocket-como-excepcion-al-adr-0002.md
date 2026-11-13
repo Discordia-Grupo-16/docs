@@ -36,8 +36,10 @@ Restricciones que aplican:
 - La consigna exige gateway único: los tres artefactos cliente no pueden
   hablar directo con `chat`.
 - El handshake de WebSocket es un `GET` HTTP con `Upgrade: websocket` — el
-  JWT viaja ahí y hay que validarlo antes de aceptar el upgrade, igual que
-  cualquier otro endpoint.
+  JWT no puede viajar en un header (la API de WebSocket del navegador no
+  lo permite) y no debe viajar en la URL, así que el handshake lleva un
+  **ticket de un solo uso** que el gateway valida antes de aceptar el
+  upgrade (ver "Actualización: ticket de un solo uso").
 - Una vez enviado un `message.send`, tres de los cuatro criterios de
   aceptación de SCRUM-41 (CA2 vacío, CA3 autorización, CA4 largo) son
   casos de **error que hay que contestar**, y hace falta que la respuesta
@@ -48,9 +50,10 @@ Restricciones que aplican:
 
 ### Opción A — El gateway hace de proxy transparente del WebSocket hacia una instancia de `chat`
 
-El cliente abre `wss://gateway/api/v1/ws` con el JWT. El gateway valida el
-JWT en el handshake (401 si es inválido, sin abrir el socket), y con el
-token válido abre su **propio** WebSocket contra una instancia de `chat`,
+El cliente abre `wss://gateway/api/v1/ws?ticket=…` con un ticket de un
+solo uso. El gateway lo canjea en el handshake (401 si es inválido, sin
+abrir el socket), y con el ticket válido abre su **propio** WebSocket contra
+una instancia de `chat`,
 pasándole la identidad ya validada en headers (`X-User-Id`,
 `X-Correlation-Id`). A partir de ahí copia frames en las dos direcciones
 sin interpretarlos.
@@ -151,7 +154,7 @@ cambios.
   `GET /api/v1/ws`. No habilita al gateway a hacer proxy HTTP sincrónico de
   ningún otro endpoint de `chat` ni de ningún otro servicio.
 - El gateway sigue sin interpretar el contenido de los frames: valida el
-  JWT en el handshake y hace rate limiting, nada más. La lógica de negocio
+  ticket en el handshake y hace rate limiting, nada más. La lógica de negocio
   (validación de canal, autorización, persistencia, fan-out) vive
   enteramente en `chat`.
 - Un `MessageAckFrame`, `MessageCreatedFrame` o `ErrorFrame` que `chat`
@@ -209,3 +212,20 @@ cambios.
   `chat-and-real-time/arquitectura/protocolo-tiempo-real.md` (SCRUM-131,
   contrato y semántica de los frames)
 - Jira: SCRUM-41 (Enviar mensaje en un canal), SCRUM-132 (esta decisión)
+
+## Actualización: ticket de un solo uso (SCRUM-150)
+
+La primera versión autenticaba el handshake con `?access_token=`, y un JWT
+en la URL puede quedar en logs de proxies y en el historial. Se reemplazó
+por un ticket:
+
+- El cliente pide `POST /api/v1/ws-ticket` con su JWT (que el gateway
+  atiende sin upstream) y recibe un ticket que vence a los 30 segundos.
+- El gateway lo guarda en Redis como `SHA-256(ticket)` y lo borra al
+  canjearlo (`GETDEL`), así que sirve una sola vez aunque haya varias
+  instancias. Al canjearlo vuelve a chequear que el `jti` no esté revocado.
+- El gateway ya no acepta `?access_token=`: ninguna URL lleva una credencial.
+  El cliente pide un ticket nuevo en cada intento de conexión.
+
+Las alternativas descartadas y el resto del razonamiento están en el
+[ADR-0018](0018-recupero-segundo-factor-y-ticket-del-websocket.md).

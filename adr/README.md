@@ -23,7 +23,9 @@ Si agregás un ADR, agregá el renglón acá en el mismo PR.
 | [ADR-0013](0013-reduccion-de-costos-en-red.md) | Reducción de costos en red | Aceptado | 2026-10-16 |
 | [ADR-0014](0014-despliegue-de-bases-de-datos.md) | Despliegue de bases de datos stateful en ECS Fargate | Aceptado | 2026-10-16 |
 | [ADR-0015](0015-gestion-de-configuracion.md) | Gestión Híbrida de Secretos (SSM) y Configuraciones (S3) | Aceptado | 2026-10-16 |
-| [ADR-0017](0017-eventos-de-ui-por-el-websocket.md) | Eventos de UI por el WebSocket de `chat`, en lugar del polling del front | Aceptado | 2026-11-01 |
+| [ADR-0017](0017-eventos-de-ui-por-el-websocket.md) | Eventos de UI por el WebSocket de `chat`, en lugar del polling del front | Reemplazado parcialmente por [ADR-0019](0019-suscripcion-a-avisos-separada-de-mensajes.md) | 2026-11-01 |
+| [ADR-0018](0018-recupero-segundo-factor-y-ticket-del-websocket.md) | Recupero de contraseña, segundo factor y ticket de un solo uso del WebSocket | Aceptado | 2026-11-07 |
+| [ADR-0019](0019-suscripcion-a-avisos-separada-de-mensajes.md) | Suscripción a avisos separada de la de mensajes en `chat` | Aceptado | 2026-11-12 |
 
 ## De servicio (referencia)
 
@@ -32,6 +34,7 @@ Viven en el repo de cada servicio, se listan acá solo si afectan a alguien de a
 | ID | Título | Servicio | Estado | Link |
 |---|---|---|---|---|
 | ADR-0001 | Un rol nuevo nace abajo de la jerarquía | `community` | Aceptado | [repo de community](https://github.com/Discordia-Grupo-16/community/blob/develop/docs/adr/0001-posicion-de-los-roles-nuevos.md) |
+| ADR-0001 | Brevo como proveedor de email del recupero de contraseña | `identity` | Aceptado | [repo de identity](https://github.com/Discordia-Grupo-16/identity/blob/develop/docs/adr/0001-proveedor-de-email.md) |
 
 ## Estados
 

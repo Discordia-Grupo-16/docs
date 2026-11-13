@@ -13,7 +13,9 @@ info:
     Correspondencia de ruteo para el camino crítico del Sprint 1:
     - /api/v1/users*, /api/v1/sessions* → identity
     - /api/v1/servers*, /api/v1/invites* → community
-    - /api/v1/channels/{channelId}/messages, /api/v1/channels/{channelId}/ws,
+    - /api/v1/channels/{channelId}/messages,
+      /api/v1/channels/{channelId}/messages/{messageId},
+      /api/v1/channels/{channelId}/ws,
       /api/v1/channels/{channelId}/voice-tokens,
       /api/v1/channels/{channelId}/read, /api/v1/users/me/unread,
       /api/v1/users/me/read-all,
@@ -171,6 +173,17 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: '[proxy → identity] Logout'
+      operationId: gatewayLogout
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Ver identity.yaml → DELETE /sessions
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /api/v1/sessions/mfa:
     post:
@@ -452,17 +465,6 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
-    delete:
-      summary: '[proxy → identity] Logout'
-      operationId: gatewayLogout
-      security:
-        - bearerAuth: []
-      responses:
-        '204':
-          description: Ver identity.yaml → DELETE /sessions
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
   /api/v1/sessions/refresh:
     post:
       summary: '[proxy → identity] Refresh de sesión'
@@ -621,6 +623,140 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/servers/{serverId}/ownership-transfer:
+    get:
+      summary: '[proxy → community] Ver la última transferencia de propiedad del servidor'
+      operationId: gatewayGetOwnershipTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Ver community.yaml → GET /servers/{serverId}/ownership-transfer
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'community.yaml#/components/schemas/OwnershipTransfer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      summary: '[proxy → community] Proponer la propiedad del servidor a otro miembro'
+      operationId: gatewayCreateOwnershipTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'community.yaml#/components/schemas/CreateOwnershipTransferRequest'
+      responses:
+        '201':
+          description: Ver community.yaml → POST /servers/{serverId}/ownership-transfer
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'community.yaml#/components/schemas/OwnershipTransfer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      summary: '[proxy → community] Cancelar la transferencia de propiedad pendiente'
+      operationId: gatewayCancelOwnershipTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '204':
+          description: Ver community.yaml → DELETE /servers/{serverId}/ownership-transfer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/servers/{serverId}/ownership-transfer/acceptance:
+    post:
+      summary: '[proxy → community] Aceptar la propiedad del servidor'
+      operationId: gatewayAcceptOwnershipTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '204':
+          description: Ver community.yaml → POST /servers/{serverId}/ownership-transfer/acceptance
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/servers/{serverId}/ownership-transfer/rejection:
+    post:
+      summary: '[proxy → community] Rechazar la propiedad del servidor'
+      operationId: gatewayRejectOwnershipTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '204':
+          description: Ver community.yaml → POST /servers/{serverId}/ownership-transfer/rejection
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/users/me/ownership-transfers:
+    get:
+      summary: '[proxy → community] Listar las transferencias de propiedad que esperan mi respuesta'
+      operationId: gatewayListMyOwnershipTransfers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ver community.yaml → GET /users/me/ownership-transfers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'community.yaml#/components/schemas/OwnershipTransfer'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -940,6 +1076,66 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/channels/{channelId}/messages/{messageId}:
+    patch:
+      summary: '[proxy → chat-y-real-time] Editar un mensaje propio'
+      operationId: gatewayEditMessage
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+        - $ref: '#/components/parameters/MessageId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+      responses:
+        '200':
+          description: Ver chat.yaml → PATCH /channels/{channelId}/messages/{messageId}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'chat.yaml#/components/schemas/Message'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      summary: '[proxy → chat-y-real-time] Eliminar un mensaje'
+      operationId: gatewayDeleteMessage
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+        - $ref: '#/components/parameters/MessageId'
+      responses:
+        '204':
+          description: Ver chat.yaml → DELETE /channels/{channelId}/messages/{messageId}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   /api/v1/channels/{channelId}/ws:
     get:
       summary: '[proxy → chat-y-real-time] Upgrade a WebSocket para un canal'
@@ -955,9 +1151,9 @@ paths:
         `X-User-Role`) que con el JWT. Un ticket vencido, ya canjeado o
         inexistente responde 401.
 
-        Transición: mientras `WS_ALLOW_QUERY_TOKEN=true` el gateway también
-        acepta `?access_token=` para no cortar a los clientes que todavía no
-        cambiaron. Un PR posterior lo apaga y deja el ticket como única forma.
+        El ticket es la única forma de abrir el socket: el gateway ya no
+        acepta `?access_token=` y ninguna URL lleva un token. La transición
+        con `WS_ALLOW_QUERY_TOKEN` se cerró y la variable ya no existe.
       operationId: gatewayChannelWebSocket
       security:
         - wsTicket: []
@@ -1198,6 +1394,37 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      summary: '[proxy → community] Eliminar un rol'
+      operationId: gatewayDeleteRole
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+      responses:
+        '204':
+          description: Ver community.yaml → DELETE /servers/{serverId}/roles/{roleId}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: >
+            Sin `MANAGE_ROLES`, o el rol está en su misma posición o por encima
+            en la jerarquía.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >
+            Es el rol por defecto del servidor, o es la única fuente de
+            `ADMINISTRATOR` de quien lo elimina. Ver community.yaml.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/servers/{serverId}/roles/{roleId}/default:
     put:
@@ -1623,6 +1850,13 @@ components:
     ChannelId:
       in: path
       name: channelId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MessageId:
+      in: path
+      name: messageId
       required: true
       schema:
         type: string

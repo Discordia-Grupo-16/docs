@@ -1,6 +1,6 @@
 # ADR-0017: Eventos de UI por el WebSocket de `chat`, en lugar del polling del front
 
-- **Estado:** Aceptado
+- **Estado:** Reemplazado parcialmente por [ADR-0019](0019-suscripcion-a-avisos-separada-de-mensajes.md)
 - **Fecha:** 2026-11-01
 - **Decisores:** Persona 2 (dueña de INF-30 en el CP3), como implementadora de la decisión D17 del
   Anexo A del plan del sprint. La gestiona y la acepta quien la escribe, que es lo que el plan
@@ -8,6 +8,21 @@
   la discusión.
 - **Servicios afectados:** `chat-and-real-time`, `web-app` (web y mobile). `community` e `identity`
   solo como productores de eventos, algunos que ya publican y otros que van a publicar.
+
+> **Qué sigue vigente y qué no.** El [ADR-0019](0019-suscripcion-a-avisos-separada-de-mensajes.md) cambió a quién le llegan los avisos de servidor.
+>
+> - **Queda sin efecto:** que los avisos de servidor salen por `Broadcast(serverId)` y llegan solo a
+>   los miembros con `VIEW_CHANNEL` ("A quién llega"), y que un miembro sin ese permiso depende del
+>   respaldo de 60 segundos ("Consecuencias"). Desde el ADR-0019 cada conexión tiene una suscripción
+>   a avisos aparte, con todos los servidores donde el usuario es miembro activo, y los avisos de
+>   servidor salen por `BroadcastNotice(serverId)`. El aviso de cambio de perfil tampoco filtra por
+>   `VIEW_CHANNEL`.
+> - **Sigue vigente:** todo lo demás. El frame `invalidate` y sus campos, qué evento produce cada
+>   aviso, `SendToUser` para los avisos a un usuario, el consumidor por instancia, el agrupado y el
+>   retraso del cliente, y el respaldo de 60 segundos para lo que no tiene evento.
+>
+> El resto del documento se conserva sin editar, salvo las marcas que apuntan al ADR-0019 y la
+> tabla de qué evento produce cada aviso, que se mantiene al día.
 
 > Este ADR **no modifica** ningún ADR anterior. Se apoya en el socket y el hub de `chat` que el
 > [ADR-0008](0008-proxy-websocket-como-excepcion-al-adr-0002.md) ya puso detrás del gateway, y
@@ -121,8 +136,8 @@ que aprende algo nuevo es el que ya tiene los sockets, y lo que aprende es *qué
 | Campo | Obligatorio | Significado |
 | --- | :-: | --- |
 | `type` | sí | Siempre `invalidate` |
-| `resources` | sí | Qué quedó viejo: `servers`, `server`, `channels`, `permissions`, `members`, `bans`, `profile`, `ownershipTransfers` |
-| `serverId` | no | A qué servidor se refieren los recursos. Va con `server`, `channels`, `permissions`, `members` y `bans`; no con `servers` ni `profile` |
+| `resources` | sí | Qué quedó viejo: `servers`, `server`, `channels`, `permissions`, `members`, `bans`, `roles`, `profile`, `ownershipTransfers` |
+| `serverId` | no | A qué servidor se refieren los recursos. Va con `server`, `channels`, `permissions`, `members`, `bans`, `roles` y `ownershipTransfers`; no con `servers` ni `profile` |
 | `userId` | no | De quién cambió el perfil. Solo va con `profile` y con `members` cuando el motivo es un cambio de perfil |
 
 - **`resources` es un conjunto abierto.** El cliente ignora los valores que no conoce, igual que ya
@@ -173,9 +188,11 @@ cuando cambia su perfil.
 | `identity.user.profile-updated` | No (`identity`) | El usuario; sus servidores | `profile`; `members` con `userId` |
 | `community.server.layout-updated` | No (`community`) | Servidor | `channels` |
 | `community.server.updated` | No (`community`) | Servidor | `server` |
-| `community.server.deleted` | No (`community`) | Servidor | `servers` |
+| `community.server.deleted` | Sí | Cada miembro activo al eliminarlo (los guarda el tombstone de `chat`) | `server` y `servers` |
+| `community.server.suspended` y `reactivated` | Sí | Cada miembro activo del servidor | `server` y `servers` |
 | `community.server.ownership-transferred` | No (`community`) | Servidor | `server` |
-| `community.server.ownership-transfer-changed` | No (`community`) | El destinatario | `ownershipTransfers` |
+| `community.server.ownership-transfer-changed` | No (`community`) | El destinatario y el owner | `ownershipTransfers` |
+| `community.role.deleted` | No (`community`) | Servidor | `roles` y `members` |
 
 Los eventos que todavía no existen los agrega su dueño al catálogo cuando los implementa, y sumar
 la fila al consumidor es una línea y un test. Los nombres de la tabla son los que corresponden a la
@@ -228,7 +245,8 @@ exista, relee, y se queda con el estado viejo hasta el siguiente aviso.
 - **Un aviso perdido se corrige tarde.** Sin replay, una instancia que estaba caída o un socket
   cortado no recibe lo que pasó mientras tanto. Lo cubre la relectura al reconectar y, en el peor
   caso, el respaldo de 60 segundos.
-- **Quien no está suscripto a un servidor no recibe sus avisos de servidor.** Un miembro sin
+- **Quien no está suscripto a un servidor no recibe sus avisos de servidor** (resuelto por el
+  [ADR-0019](0019-suscripcion-a-avisos-separada-de-mensajes.md)). Un miembro sin
   `VIEW_CHANNEL` depende del respaldo. Es aceptable porque no ve canales, y los avisos que sí lo
   afectan (`permissions`, `servers`) le llegan por `SendToUser`.
 - El cliente gana estado y lógica que antes no tenía: agrupar, dispersar y relear.
@@ -237,13 +255,15 @@ exista, relee, y se queda con el estado viejo hasta el siguiente aviso.
 
 **Qué queda pendiente por esta decisión**
 
-- **La lista de roles y el desbaneo no tienen evento** y siguen con el respaldo de 60 segundos
-  hasta que lo tengan.
+- **La lista de roles tiene aviso solo al eliminar un rol** (`community.role.deleted`). Crear un
+  rol, editar sus permisos y marcarlo por defecto, igual que el desbaneo, no tienen evento y siguen
+  con el respaldo de 60 segundos hasta que lo tengan.
 - Los eventos que marca la tabla como inexistentes los publican sus dueños: `layout-updated` y
-  `server.updated` (`community`, organización del servidor), `server.deleted` (`community`,
-  backoffice), los de la transferencia de propiedad (`community`) y `profile-updated` (`identity`,
-  que ya figura en el catálogo pero todavía no se publica).
-- `ActiveServers` filtra por `VIEW_CHANNEL` del usuario que cambió su perfil. Si se quiere que lo
+  `server.updated` (`community`, organización del servidor), los de la transferencia de propiedad
+  (`community`) y `profile-updated` (`identity`, que ya figura en el catálogo pero todavía no se
+  publica).
+- `ActiveServers` filtra por `VIEW_CHANNEL` del usuario que cambió su perfil (resuelto por el
+  [ADR-0019](0019-suscripcion-a-avisos-separada-de-mensajes.md)). Si se quiere que lo
   vean también los servidores donde no tiene ese permiso, hace falta una consulta sin ese filtro.
 - Si en el futuro se elige el push o un centro de notificaciones, hay que revisar la Opción C.
 
