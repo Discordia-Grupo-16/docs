@@ -122,7 +122,7 @@ que aprende algo nuevo es el que ya tiene los sockets, y lo que aprende es *qué
 | --- | :-: | --- |
 | `type` | sí | Siempre `invalidate` |
 | `resources` | sí | Qué quedó viejo: `servers`, `server`, `channels`, `permissions`, `members`, `bans`, `roles`, `profile`, `ownershipTransfers` |
-| `serverId` | no | A qué servidor se refieren los recursos. Va con `server`, `channels`, `permissions`, `members`, `bans` y `roles`; no con `servers` ni `profile` |
+| `serverId` | no | A qué servidor se refieren los recursos. Va con `server`, `channels`, `permissions`, `members`, `bans`, `roles` y `ownershipTransfers`; no con `servers` ni `profile` |
 | `userId` | no | De quién cambió el perfil. Solo va con `profile` y con `members` cuando el motivo es un cambio de perfil |
 
 - **`resources` es un conjunto abierto.** El cliente ignora los valores que no conoce, igual que ya
