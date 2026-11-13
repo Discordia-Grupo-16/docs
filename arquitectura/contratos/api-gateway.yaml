@@ -1151,9 +1151,9 @@ paths:
         `X-User-Role`) que con el JWT. Un ticket vencido, ya canjeado o
         inexistente responde 401.
 
-        Transición: mientras `WS_ALLOW_QUERY_TOKEN=true` el gateway también
-        acepta `?access_token=` para no cortar a los clientes que todavía no
-        cambiaron. Un PR posterior lo apaga y deja el ticket como única forma.
+        El ticket es la única forma de abrir el socket: el gateway ya no
+        acepta `?access_token=` y ninguna URL lleva un token. La transición
+        con `WS_ALLOW_QUERY_TOKEN` se cerró y la variable ya no existe.
       operationId: gatewayChannelWebSocket
       security:
         - wsTicket: []
