@@ -42,7 +42,7 @@ Restricciones que mandaron:
 
 ## Opciones consideradas
 
-Se decidieron seis cosas; cada una con las alternativas que se descartaron.
+Se decidieron siete cosas; cada una con las alternativas que se descartaron.
 
 ### 1. Cómo viaja el token del recupero
 
