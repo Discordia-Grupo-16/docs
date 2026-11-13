@@ -174,6 +174,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+    delete:
+      summary: '[proxy → identity] Logout'
+      operationId: gatewayLogout
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Ver identity.yaml → DELETE /sessions
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /api/v1/sessions/mfa:
     post:
       summary: '[proxy → identity] Segundo paso del login con 2FA'
@@ -454,17 +465,6 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
-    delete:
-      summary: '[proxy → identity] Logout'
-      operationId: gatewayLogout
-      security:
-        - bearerAuth: []
-      responses:
-        '204':
-          description: Ver identity.yaml → DELETE /sessions
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
   /api/v1/sessions/refresh:
     post:
       summary: '[proxy → identity] Refresh de sesión'
@@ -623,6 +623,140 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/servers/{serverId}/ownership-transfer:
+    get:
+      summary: '[proxy → community] Ver la última transferencia de propiedad del servidor'
+      operationId: gatewayGetOwnershipTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Ver community.yaml → GET /servers/{serverId}/ownership-transfer
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'community.yaml#/components/schemas/OwnershipTransfer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      summary: '[proxy → community] Proponer la propiedad del servidor a otro miembro'
+      operationId: gatewayCreateOwnershipTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'community.yaml#/components/schemas/CreateOwnershipTransferRequest'
+      responses:
+        '201':
+          description: Ver community.yaml → POST /servers/{serverId}/ownership-transfer
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'community.yaml#/components/schemas/OwnershipTransfer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      summary: '[proxy → community] Cancelar la transferencia de propiedad pendiente'
+      operationId: gatewayCancelOwnershipTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '204':
+          description: Ver community.yaml → DELETE /servers/{serverId}/ownership-transfer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/servers/{serverId}/ownership-transfer/acceptance:
+    post:
+      summary: '[proxy → community] Aceptar la propiedad del servidor'
+      operationId: gatewayAcceptOwnershipTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '204':
+          description: Ver community.yaml → POST /servers/{serverId}/ownership-transfer/acceptance
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/servers/{serverId}/ownership-transfer/rejection:
+    post:
+      summary: '[proxy → community] Rechazar la propiedad del servidor'
+      operationId: gatewayRejectOwnershipTransfer
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '204':
+          description: Ver community.yaml → POST /servers/{serverId}/ownership-transfer/rejection
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/users/me/ownership-transfers:
+    get:
+      summary: '[proxy → community] Listar las transferencias de propiedad que esperan mi respuesta'
+      operationId: gatewayListMyOwnershipTransfers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ver community.yaml → GET /users/me/ownership-transfers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'community.yaml#/components/schemas/OwnershipTransfer'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -1260,6 +1394,37 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      summary: '[proxy → community] Eliminar un rol'
+      operationId: gatewayDeleteRole
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/RoleId'
+      responses:
+        '204':
+          description: Ver community.yaml → DELETE /servers/{serverId}/roles/{roleId}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: >
+            Sin `MANAGE_ROLES`, o el rol está en su misma posición o por encima
+            en la jerarquía.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >
+            Es el rol por defecto del servidor, o es la única fuente de
+            `ADMINISTRATOR` de quien lo elimina. Ver community.yaml.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/servers/{serverId}/roles/{roleId}/default:
     put:
@@ -1521,6 +1686,86 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/admin/servers:
+    get:
+      summary: '[proxy → community] Listado de servidores para el backoffice'
+      description: >
+        Solo staff: community responde 403 si el rol del JWT no es `staff`.
+      operationId: gatewayListServersForAdmin
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - in: query
+          name: search
+          required: false
+          description: Texto a buscar en el nombre del servidor.
+          schema:
+            type: string
+            maxLength: 100
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Ver community.yaml → GET /admin/servers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ data, meta ]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'community.yaml#/components/schemas/AdminServer'
+                  meta:
+                    $ref: 'community.yaml#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/v1/admin/servers/{serverId}:
+    delete:
+      summary: Eliminar Servidor (backoffice)
+      description: >
+        Solo staff: community responde 403 si el rol del JWT no es `staff`.
+      operationId: gatewayDeleteServerForAdmin
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          description: Identificador único del servidor
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Ver community.yaml → DELETE .../admin/servers/{serverId}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
 
 components:
   securitySchemes:
