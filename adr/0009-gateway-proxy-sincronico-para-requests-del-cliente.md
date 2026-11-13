@@ -115,6 +115,12 @@ La consigna pide justificar cada comunicación sincrónica. Las 19 operaciones H
 | `GET /api/v1/servers/{serverId}` | sí — lectura, `403` si no es miembro | — | |
 | `DELETE /api/v1/servers/{serverId}/members/me` | sí — `204` | `community.member.left` | `chat`, `metrics` |
 | `PUT /api/v1/servers/{serverId}/bans/{userId}` | sí — `204`, idempotente | `community.member.left` | `chat`, `metrics` |
+| `GET /api/v1/servers/{serverId}/ownership-transfer` | sí — lectura, `403` si no es el owner | — | |
+| `POST /api/v1/servers/{serverId}/ownership-transfer` | sí — `201` con la pendiente; `403`, `409` y `422` | `community.server.ownership-transfer-changed` | `chat` |
+| `DELETE /api/v1/servers/{serverId}/ownership-transfer` | sí — `204`, idempotente | `community.server.ownership-transfer-changed` | `chat` |
+| `POST /api/v1/servers/{serverId}/ownership-transfer/acceptance` | sí — `204`, idempotente | `community.server.ownership-transferred`, `community.member.permissions-changed` | `chat`, `metrics` |
+| `POST /api/v1/servers/{serverId}/ownership-transfer/rejection` | sí — `204`, idempotente | `community.server.ownership-transfer-changed` | `chat` |
+| `GET /api/v1/users/me/ownership-transfers` | sí — lectura | — | |
 | `POST /api/v1/servers/{serverId}/invites` | sí — `201` con el código | — ¹ | |
 | `DELETE /api/v1/servers/{serverId}/invites/{inviteId}` | sí — `204` | — ¹ | |
 | `GET /api/v1/invites/{code}` | sí — lectura previa a unirse | — | |
@@ -123,6 +129,7 @@ La consigna pide justificar cada comunicación sincrónica. Las 19 operaciones H
 | `GET /api/v1/servers/{serverId}/channels` | sí — lectura | — | |
 | `PATCH /api/v1/servers/{serverId}/channels/{channelId}` | sí — `200` con el canal | `community.channel.updated` | `chat`, `metrics` |
 | `DELETE /api/v1/servers/{serverId}/channels/{channelId}` | sí — `204` | `community.channel.deleted` | `chat`, `metrics` |
+| `DELETE /api/v1/servers/{serverId}/roles/{roleId}` | sí — `204`; `403`, `404` y `409` | `community.member.permissions-changed` (si alguien tenía el rol), `community.role.deleted` | `chat`, `metrics` |
 | `GET /api/v1/channels/{channelId}/messages` | sí — lectura del historial | — | |
 | `POST /api/v1/channels/{channelId}/voice-tokens` | sí — `200` con el token; `403`, `404` y `422` se deciden contra la proyección de `chat` | — | |
 | `GET /api/v1/channels/{channelId}/ws` | no aplica — transporte de larga duración, [ADR-0008](0008-proxy-websocket-como-excepcion-al-adr-0002.md) | `chat.message.sent` | `chat` (fan-out), `metrics` |
