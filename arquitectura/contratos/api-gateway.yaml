@@ -1540,6 +1540,66 @@ paths:
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
 
+  /api/v1/admin/servers/{serverId}/suspension:
+    post:
+      summary: '[proxy → community] Suspender servidor (backoffice)'
+      description: Solo staff; ver community.yaml → POST /admin/servers/{serverId}/suspension.
+      operationId: gatewaySuspendServerForAdmin
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          description: Identificador único del servidor
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Servidor suspendido.
+          content:
+            application/json:
+              schema:
+                $ref: 'community.yaml#/components/schemas/AdminServer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      summary: '[proxy → community] Reactivar servidor (backoffice)'
+      description: Solo staff; ver community.yaml → DELETE /admin/servers/{serverId}/suspension.
+      operationId: gatewayReactivateServerForAdmin
+      security:
+        - bearerAuth: [ ]
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          description: Identificador único del servidor
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Servidor reactivado.
+          content:
+            application/json:
+              schema:
+                $ref: 'community.yaml#/components/schemas/AdminServer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
 components:
   securitySchemes:
     bearerAuth:
