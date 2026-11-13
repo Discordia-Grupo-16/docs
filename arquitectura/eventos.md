@@ -100,24 +100,26 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 
 ## Eventos
 
-| Evento | Publica | Consumen | Payload (`data`) | ADR / historia |
-|---|---|---|---|---|
-| `identity.user.registered` | `identity` | `metrics` (fan-out) | *A definir por `identity`* | Historia de registro — dueño `identity` |
+| Evento | Publica | Consumen | Payload (`data`) | ADR / historia                                                 |
+|---|---|---|---|----------------------------------------------------------------|
+| `identity.user.registered` | `identity` | `metrics` (fan-out) | *A definir por `identity`* | Historia de registro — dueño `identity`                        |
 | `community.server.created` | `community` | `chat` (avisos de UI, cola por instancia) ⁷, `metrics` (fan-out) | `{ serverId, name, ownerId }` ⁷ | Historia de creación de servidor — dueño `community`; ADR-0017 |
-| `community.server.deleted` | `community` | `chat` (proyección; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId }` | SCRUM-137; ADR-0017 |
-| `community.channel.created` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ channelId, serverId, name, type }` ¹ | SCRUM-137; ADR-0017 |
-| `community.channel.updated` | `community` | `chat` (avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ channelId, serverId, name, type }` ¹ ⁷ | SCRUM-137; ADR-0017 |
-| `community.channel.deleted` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ channelId, serverId }` ¹ ⁷ | SCRUM-137; ADR-0017 |
-| `community.member.joined` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ serverId, userId }` ¹ | SCRUM-137; ADR-0017 |
-| `community.member.left` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, userId, reason }` ¹ ³ | SCRUM-137, SCRUM-68, SCRUM-69; ADR-0017 |
-| `community.member.permissions-changed` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61; ADR-0017 |
-| `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId }` | SCRUM-41 |
-| `chat.membership.changed` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ serverId, userId }` ² | SCRUM-146 |
-| `chat.voice.participants-changed` | `chat` | `chat` (fan-out a sockets, cola por instancia), `metrics` (fan-out) | `{ serverId, channelId, participants: [{ userId, joinedAt }], syncedAt }` | SCRUM-54; ADR-0017 |
-| `chat.read-state.updated` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ userId, states: [{ channelId, serverId, lastReadMessageId, lastReadAt }] }` ⁸ | SCRUM-75, SCRUM-76 |
-| `identity.user.suspended` | `identity` | `chat` (cierre de sockets, cola por instancia), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ userId, suspendedBy }` ⁵ | SCRUM-81 |
-| `identity.user.reactivated` | `identity` | `metrics` (fan-out) | `{ userId, reactivatedBy }` ⁵ | SCRUM-82 |
-| `identity.user.profile-updated` | `identity` | `chat` (aviso a los clientes conectados, cola por instancia), `metrics` (fan-out) | `{ userId }` ⁶ | SCRUM-167 |
+| `community.server.deleted` | `community` | `chat` (proyección; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId }` | SCRUM-84                                                        |
+| `community.server.suspended` | `community` | `metrics` (fan-out) | `{ serverId }` ⁹ | SCRUM-85                                                       |
+| `community.server.reactivated` | `community` | `metrics` (fan-out) | `{ serverId }` ⁹ | SCRUM-85                                                       |
+| `community.channel.created` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ channelId, serverId, name, type }` ¹ | SCRUM-137; ADR-0017                                            |
+| `community.channel.updated` | `community` | `chat` (avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ channelId, serverId, name, type }` ¹ ⁷ | SCRUM-137; ADR-0017                                            |
+| `community.channel.deleted` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ channelId, serverId }` ¹ ⁷ | SCRUM-137; ADR-0017                                            |
+| `community.member.joined` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ serverId, userId }` ¹ | SCRUM-137; ADR-0017                                            |
+| `community.member.left` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, userId, reason }` ¹ ³ | SCRUM-137, SCRUM-68, SCRUM-69; ADR-0017                        |
+| `community.member.permissions-changed` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61; ADR-0017                                             |
+| `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId }` | SCRUM-41                                                       |
+| `chat.membership.changed` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ serverId, userId }` ² | SCRUM-146                                                      |
+| `chat.voice.participants-changed` | `chat` | `chat` (fan-out a sockets, cola por instancia), `metrics` (fan-out) | `{ serverId, channelId, participants: [{ userId, joinedAt }], syncedAt }` | SCRUM-54; ADR-0017                                             |
+| `chat.read-state.updated` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ userId, states: [{ channelId, serverId, lastReadMessageId, lastReadAt }] }` ⁸ | SCRUM-75, SCRUM-76                                             |
+| `identity.user.suspended` | `identity` | `chat` (cierre de sockets, cola por instancia), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ userId, suspendedBy }` ⁵ | SCRUM-81                                                       |
+| `identity.user.reactivated` | `identity` | `metrics` (fan-out) | `{ userId, reactivatedBy }` ⁵ | SCRUM-82                                                       |
+| `identity.user.profile-updated` | `identity` | `chat` (aviso a los clientes conectados, cola por instancia), `metrics` (fan-out) | `{ userId }` ⁶ | SCRUM-167                                                      |
 
 ¹ Payload de los cinco eventos de `community` propuesto por `chat`, que es quien primero los necesita (proyección local de autorización). Es una propuesta, no el contrato: el dueño de `community` la confirma o la reemplaza en la historia que implementa cada evento y actualiza esta tabla en ese PR. Para el CP1 solo son obligatorios `member.joined` y `channel.created` (la demo depende de ellos); `chat` ya consume también `member.left` y `channel.deleted`, y se catalogan todos ahora para que el nombre y el payload no cambien cuando se implementen. `channel.updated` no lo consume la **proyección** de `chat`: el nombre y el tipo de un canal no cambian quién puede escribir en él (la regla del CP1 es que ser miembro del servidor habilita todos sus canales), así que esa cola ni siquiera se bindea a ese evento. Lo que sí lo consume es la cola de avisos de UI (nota ⁷), que no usa la proyección.
 
@@ -183,6 +185,8 @@ Y las que agrega `channelOverrides` (ADR-0012):
    - **Idempotencia y orden:** el estado de un canal solo avanza. Se ordena por `(createdAt, messageId)` del mensaje, la misma tupla que usa el historial, así que un evento repetido o fuera de orden no retrocede nada: el cliente aplica `lastReadMessageId` solo si es posterior al que ya tiene.
    - **Qué no publica:** el avance de lectura del autor al enviar un mensaje. Sus otras sesiones ya reciben el `message.created` con su propio `authorId` y lo deducen solas.
    - **Menciones:** el `GET` de no leídos devuelve un `mentionCount` por canal que vale siempre `0` hasta que exista la optativa "Menciones". El evento no lo lleva.
+
+⁹ Suspensión y reactivación de servidores (backoffice). Ambos eventos llevan solo el `serverId` afectado; el estado actualizado se guarda antes de publicar el evento.
 
 ## Nota sobre los dos lenguajes
 
