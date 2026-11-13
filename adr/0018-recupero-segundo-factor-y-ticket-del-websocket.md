@@ -7,9 +7,9 @@
 
 > Este ADR es **transversal** porque trata de autenticación y cruza servicios (regla de ruteo de
 > `CONTRIBUTING.md`). El número 0018 se reserva al abrir el PR: 0016 y 0017 ya son de Tomás y de
-> Luis. Cuando se cierre la transición del ticket, el [ADR-0008](0008-proxy-websocket-como-excepcion-al-adr-0002.md)
-> pasa de `Propuesto` a `Aceptado` con el ticket en lugar del `access_token`; **este ADR no lo reemplaza**,
-> lo completa en el punto de cómo se autentica el handshake.
+> Luis. Al cerrarse la transición del ticket, el [ADR-0008](0008-proxy-websocket-como-excepcion-al-adr-0002.md)
+> sumó la sección "Actualización: ticket de un solo uso" con el ticket en lugar del `access_token`;
+> **este ADR no lo reemplaza**, lo completa en el punto de cómo se autentica el handshake.
 
 ## Contexto
 
@@ -272,8 +272,6 @@ El taller del 29/10 aprobó estos cambios sobre D10, D11 y D13:
 
 **Qué queda pendiente por esta decisión**
 
-- Implementar el ticket (SCRUM-150) y cerrar la transición con `WS_ALLOW_QUERY_TOKEN=false`; recién ahí
-  el ADR-0008 pasa a `Aceptado`.
 - El login con Google (SCRUM-21, ideal) usa el mismo `mfaRequired` pero no se decide acá: si entra, va en
   su propio ADR o en una enmienda de este.
 - Que las cuentas sin contraseña (las de Google) puedan desactivar el 2FA: hoy `disable` pide la

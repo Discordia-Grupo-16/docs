@@ -154,7 +154,7 @@ cambios.
   `GET /api/v1/ws`. No habilita al gateway a hacer proxy HTTP sincrónico de
   ningún otro endpoint de `chat` ni de ningún otro servicio.
 - El gateway sigue sin interpretar el contenido de los frames: valida el
-  JWT en el handshake y hace rate limiting, nada más. La lógica de negocio
+  ticket en el handshake y hace rate limiting, nada más. La lógica de negocio
   (validación de canal, autorización, persistencia, fan-out) vive
   enteramente en `chat`.
 - Un `MessageAckFrame`, `MessageCreatedFrame` o `ErrorFrame` que `chat`
@@ -224,7 +224,7 @@ por un ticket:
 - El gateway lo guarda en Redis como `SHA-256(ticket)` y lo borra al
   canjearlo (`GETDEL`), así que sirve una sola vez aunque haya varias
   instancias. Al canjearlo vuelve a chequear que el `jti` no esté revocado.
-- El gateway ya no acepta `?access_token=`: ninguna URL lleva un credencial.
+- El gateway ya no acepta `?access_token=`: ninguna URL lleva una credencial.
   El cliente pide un ticket nuevo en cada intento de conexión.
 
 Las alternativas descartadas y el resto del razonamiento están en el
