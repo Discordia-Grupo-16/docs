@@ -23,7 +23,8 @@ Si agregás un ADR, agregá el renglón acá en el mismo PR.
 | [ADR-0013](0013-reduccion-de-costos-en-red.md) | Reducción de costos en red | Aceptado | 2026-10-16 |
 | [ADR-0014](0014-despliegue-de-bases-de-datos.md) | Despliegue de bases de datos stateful en ECS Fargate | Aceptado | 2026-10-16 |
 | [ADR-0015](0015-gestion-de-configuracion.md) | Gestión Híbrida de Secretos (SSM) y Configuraciones (S3) | Aceptado | 2026-10-16 |
-| [ADR-0017](0017-eventos-de-ui-por-el-websocket.md) | Eventos de UI por el WebSocket de `chat`, en lugar del polling del front | Aceptado | 2026-11-01 |
+| [ADR-0017](0017-eventos-de-ui-por-el-websocket.md) | Eventos de UI por el WebSocket de `chat`, en lugar del polling del front | Reemplazado parcialmente por [ADR-0019](0019-suscripcion-a-avisos-separada-de-mensajes.md) | 2026-11-01 |
+| [ADR-0019](0019-suscripcion-a-avisos-separada-de-mensajes.md) | Suscripción a avisos separada de la de mensajes en `chat` | Aceptado | 2026-11-12 |
 
 ## De servicio (referencia)
 
