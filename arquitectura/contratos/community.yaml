@@ -777,8 +777,9 @@ paths:
       summary: Generar una invitación al servidor
       description: >
         CA1 de "Generar invitación": crea un link único, configurable con o
-        sin expiración y con o sin límite de usos. Requiere permiso de
-        invitar en el servidor.
+        sin expiración y con o sin límite de usos. Requiere `CREATE_INVITE`
+        en el servidor; el owner y quien tiene `ADMINISTRATOR` lo tienen
+        siempre.
       operationId: createInvite
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -802,7 +803,7 @@ paths:
                   data:
                     $ref: '#/components/schemas/Invite'
         '403':
-          description: El usuario no tiene permiso para invitar en este servidor.
+          description: El usuario no tiene `CREATE_INVITE` en este servidor.
           content:
             application/problem+json:
               schema:
@@ -827,7 +828,7 @@ paths:
         '204':
           description: Invitación revocada.
         '403':
-          description: El usuario no tiene permiso para gestionar invitaciones en este servidor.
+          description: El usuario no tiene `CREATE_INVITE` en este servidor.
           content:
             application/problem+json:
               schema:
@@ -2204,6 +2205,12 @@ components:
         - BAN_MEMBERS
         - MANAGE_SERVER
         - ADMINISTRATOR
+        - CREATE_INVITE
+        - ADD_REACTIONS
+        - MENTION_EVERYONE
+        - ATTACH_FILES
+        - MODERATE_MEMBERS
+        - VIEW_AUDIT_LOG
 
     Role:
       type: object
