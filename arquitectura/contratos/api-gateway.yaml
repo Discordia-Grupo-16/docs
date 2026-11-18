@@ -20,7 +20,10 @@ info:
       /api/v1/channels/{channelId}/read, /api/v1/users/me/unread,
       /api/v1/users/me/read-all,
       /api/v1/servers/{serverId}/voice-participants,
+      /api/v1/servers/{serverId}/presence, /api/v1/users/me/presence,
       /api/v1/webhooks/livekit → chat-y-real-time
+      (las de `/api/v1/servers/{serverId}/...` que van a `chat` se declaran
+      antes que el prefijo `/api/v1/servers*` de `community`)
     - /api/v1/admin/users* → identity (backoffice, solo staff)
     - /api/v1/password-resets* → identity (públicas, sin JWT)
     - /api/v1/ws-ticket → lo atiende el propio gateway (sin upstream)
@@ -1648,6 +1651,66 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/servers/{serverId}/presence:
+    get:
+      summary: '[proxy → chat-y-real-time] Estado de actividad de los miembros de un servidor'
+      description: >
+        SCRUM-27. Va a `chat`, no a `community`: la ruta se declara antes
+        que las de `/api/v1/servers/...` de `community` en `routes.yaml`.
+      operationId: gatewayGetServerPresence
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Ver chat.yaml → GET /servers/{serverId}/presence
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'chat.yaml#/components/schemas/MemberPresence'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/users/me/presence:
+    put:
+      summary: '[proxy → chat-y-real-time] Fijar o quitar el estado manual del usuario'
+      description: >
+        SCRUM-27, CA3. Va a `chat`, no a `identity`: la ruta se declara
+        antes que el prefijo `/api/v1/users*` de `identity`.
+      operationId: gatewaySetMyPresence
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'chat.yaml#/components/schemas/SetPresenceRequest'
+      responses:
+        '204':
+          description: Ver chat.yaml → PUT /users/me/presence
+        '400':
+          description: Ver chat.yaml → PUT /users/me/presence
+          content:
+            application/problem+json:
+              schema:
+                $ref: 'chat.yaml#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 

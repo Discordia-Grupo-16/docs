@@ -287,8 +287,21 @@ paths:
         `VoiceParticipantsUpdatedFrame` (`voice-participants.updated`,
         SCRUM-54), cuando cambia quién está conectado a un canal de voz;
         `MessageUpdatedFrame` (`message.updated`, SCRUM-44), cuando se edita
-        un mensaje; y `MessageDeletedFrame` (`message.deleted`, SCRUM-45),
-        cuando se borra uno.
+        un mensaje; `MessageDeletedFrame` (`message.deleted`, SCRUM-45),
+        cuando se borra uno; y `PresenceFrame` (`presence`, SCRUM-27),
+        cuando cambia el estado de actividad de alguien que comparte un
+        servidor con el usuario.
+
+
+        Frames que el cliente manda además de `message.send`:
+        `PresenceActivityFrame` (`presence.activity`, SCRUM-27), para avisar
+        que el usuario quedó inactivo o volvió. No tiene respuesta: si el
+        estado derivado cambia, el aviso llega como un `presence` más.
+
+
+        La conexión misma es la señal de "en línea" (SCRUM-27): mientras el
+        usuario tenga al menos un socket abierto en alguna instancia, cuenta
+        como conectado. Al cerrar el último pasa a desconectado.
       operationId: channelWebSocket
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -619,6 +632,106 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: El usuario no es miembro activo del servidor, o le falta `VIEW_CHANNEL`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /servers/{serverId}/presence:
+    get:
+      summary: Estado de actividad de los miembros de un servidor
+      description: >
+        SCRUM-27. Foto inicial al abrir un servidor, y relectura al
+        reconectar el WebSocket o volver a la app: los frames `presence`
+        que se perdieron con el socket caído no se reenvían (ADR-0017).
+        Valida contra la proyección local que el usuario sea miembro activo
+        del servidor (403 si no); no pide `VIEW_CHANNEL`, igual que la lista
+        de miembros. Devuelve solo los miembros que **no** están
+        desconectados: un miembro ausente de la lista está `offline`, y un
+        usuario invisible no aparece. Incluye al propio usuario.
+      operationId: getServerPresence
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Miembros del servidor que no están desconectados.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MemberPresence'
+        '400':
+          description: '`serverId` no es un UUID.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: El usuario no es miembro activo del servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/presence:
+    put:
+      summary: Fijar o quitar el estado manual del usuario
+      description: >
+        SCRUM-27, CA3. Fija "No molestar" (`dnd`) o "Invisible"
+        (`invisible`), o vuelve al estado automático con `null`. El estado
+        manual no se pisa con el automático: un usuario en `dnd` sigue en
+        `dnd` aunque quede inactivo, y uno invisible se ve `offline` aunque
+        tenga sockets abiertos. Se guarda en `chat` y sobrevive a la
+        desconexión: al volver a entrar, el usuario sigue en `dnd` o
+        invisible hasta que lo cambie.
+
+
+        Es idempotente. Si el estado derivado cambia, `chat` publica
+        `chat.presence.changed`; si no, no publica nada.
+      operationId: setMyPresence
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPresenceRequest'
+      responses:
+        '204':
+          description: Estado manual guardado.
+        '400':
+          description: El body no es JSON, falta `manual`, o su valor no es `dnd`, `invisible` ni `null`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
           content:
             application/problem+json:
               schema:
@@ -1006,6 +1119,102 @@ components:
             name:
               type: string
               description: Nombre de la sala; es igual al `channelId`.
+
+    PresenceStatus:
+      type: string
+      description: >
+        Estado de actividad derivado (SCRUM-27). Lo calcula `chat`, en este
+        orden: `offline` si el usuario es invisible o no tiene ningún
+        latido vigente en ninguna instancia; `dnd` si lo fijó a mano;
+        `idle` si su cliente avisó inactividad; `online` en cualquier otro
+        caso. Textos de la interfaz: "En línea", "Ausente", "No molestar" y
+        "Desconectado". `invisible` no es un estado visible: se ve como
+        `offline`.
+      enum: [online, idle, dnd, offline]
+
+    MemberPresence:
+      type: object
+      description: Estado de actividad de un usuario.
+      required: [userId, status, updatedAt]
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: Referencia a User.id en `identity`.
+        status:
+          $ref: '#/components/schemas/PresenceStatus'
+        updatedAt:
+          type: string
+          format: date-time
+          description: >
+            Momento, en UTC, en que `chat` guardó este estado. El cliente
+            aplica un estado (del snapshot o de un frame) solo si su
+            `updatedAt` es más nuevo que el que ya tiene para ese usuario,
+            comparado como instante.
+
+    SetPresenceRequest:
+      type: object
+      required: [manual]
+      properties:
+        manual:
+          type: string
+          enum: [dnd, invisible]
+          nullable: true
+          description: >
+            `dnd` para "No molestar", `invisible` para aparecer como
+            desconectado, o `null` para volver al estado automático.
+
+    PresenceFrame:
+      type: object
+      description: >
+        Frame (SCRUM-27) que `chat` envía por el WebSocket cuando cambia el
+        estado derivado de un usuario. Lleva el dato y no es un
+        `invalidate`, porque la presencia es de `chat` (ADR-0017). Se
+        entrega con `BroadcastNotice(serverId)` a cada servidor de
+        `MemberServers(userId)` (ADR-0019): lo recibe todo miembro activo
+        que comparte un servidor con ese usuario, sin pedir `VIEW_CHANNEL`,
+        y también las otras sesiones del propio usuario. Un usuario que
+        comparte varios servidores con otro puede recibir el mismo frame
+        más de una vez; con la regla de `updatedAt`, aplicarlo dos veces no
+        cambia nada. Nace del evento
+        `chat.presence.changed`.
+      required: [type, userId, status, updatedAt]
+      properties:
+        type:
+          type: string
+          enum: [presence]
+        userId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/PresenceStatus'
+        updatedAt:
+          type: string
+          format: date-time
+          description: >
+            Momento, en UTC, en que `chat` guardó este estado. El cliente
+            aplica un estado (del snapshot o de un frame) solo si su
+            `updatedAt` es más nuevo que el que ya tiene para ese usuario,
+            comparado como instante.
+
+    PresenceActivityFrame:
+      type: object
+      description: >
+        Frame (SCRUM-27, CA2) que el **cliente** manda por el WebSocket.
+        `idle: true` a los `PRESENCE_IDLE_MINUTES` (5 por defecto, del lado
+        del cliente) sin interacción, o al pasar a segundo plano en mobile;
+        `idle: false` al volver. Vale para la conexión que lo manda: el
+        usuario cuenta como inactivo solo si **todas** sus conexiones lo
+        están, así que una pestaña abierta y activa lo mantiene `online`.
+        Una conexión nueva arranca activa. No tiene respuesta; un valor
+        repetido no hace nada.
+      required: [type, idle]
+      properties:
+        type:
+          type: string
+          enum: [presence.activity]
+        idle:
+          type: boolean
 
     ErrorResponse:
       type: object
