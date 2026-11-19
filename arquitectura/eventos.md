@@ -156,6 +156,18 @@ Reglas de publicación:
 - **Cola compartida**, como los demás eventos de `community`: escribe en el Mongo de `chat`, que es uno solo.
 - **Si el servidor es muy grande**, el productor puede partir el cambio en varios eventos con un subconjunto de `members` cada uno. No cambia el contrato: el consumidor ya aplica entrada por entrada.
 - El bitmask **no viaja en el JWT**: cambia sin que el token cambie.
+- **Bits de la entrega final (SCRUM-178).** Se agregan juntos al catálogo del [ADR-0011](../adr/0011-roles-y-permisos-en-community.md), a continuación de `MANAGE_MESSAGES` y sin reusar números. `chat` copia solo los que chequea.
+
+  | Bit | Valor | Nombre | Qué habilita | Quién lo chequea | Rol por defecto |
+  | --: | ----: | --- | --- | --- | --- |
+  | 10 | 1024 | `CREATE_INVITE` | Crear, listar y revocar invitaciones ("Generar invitación") | `community` | No |
+  | 11 | 2048 | `ADD_REACTIONS` | Reaccionar a los mensajes (SCRUM-49) | `chat` | Sí |
+  | 12 | 4096 | `MENTION_EVERYONE` | Mencionar a todo el servidor y a un rol (SCRUM-47) | `chat` | No |
+  | 13 | 8192 | `ATTACH_FILES` | Adjuntar archivos (SCRUM-48) | `chat` | Sí |
+  | 14 | 16384 | `MODERATE_MEMBERS` | Silenciar temporalmente (SCRUM-71) y editar las palabras prohibidas (SCRUM-74) | `community` | No |
+  | 15 | 32768 | `VIEW_AUDIT_LOG` | Ver el registro de auditoría de moderación (SCRUM-72) | `community` | No |
+
+  Los servidores que ya existían reciben `ADD_REACTIONS` y `ATTACH_FILES` en su rol por defecto con una migración, que no publica este evento: la proyección de `chat` no los tiene hasta el próximo `permissions-changed` de cada servidor. Para la entrega final se parte de bases vacías.
 
 Y las que agrega `channelOverrides` (ADR-0012):
 

@@ -100,6 +100,13 @@ Un **bitmask** sobre el campo `permissions` que ya tiene `roles`. Cada permiso e
 | 6 | 64 | `BAN_MEMBERS` | Banear y revocar baneos | `community` |
 | 7 | 128 | `MANAGE_SERVER` | Editar la configuración del servidor | `community` |
 | 8 | 256 | `ADMINISTRATOR` | Todo, sin chequear bit por bit | `community` y `chat` |
+| 9 | 512 | `MANAGE_MESSAGES` | Borrar mensajes de otros (SCRUM-45) | `chat` |
+
+> Esta tabla es el catálogo inicial, más `MANAGE_MESSAGES`. Los permisos que se agregan después
+> siguen las reglas de este ADR y no lo modifican: sus bits están en la nota de
+> `community.member.permissions-changed` de [`eventos.md`](../arquitectura/eventos.md), y la lista
+> completa de nombres, en el enum `Permission` de
+> [`community.yaml`](../arquitectura/contratos/community.yaml).
 
 Reglas, que valen para los dos servicios:
 
