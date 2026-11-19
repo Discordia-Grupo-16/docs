@@ -88,6 +88,7 @@ Sobre ese exchange hay dos formas de declarar una cola, y **no son intercambiabl
 
 - **Cola compartida** para consumir los eventos de `community` que alimentan su proyección de autorización: el Mongo de `chat` es uno solo, no tiene sentido que tres instancias apliquen el mismo `member.joined` tres veces.
 - **Cola por instancia** para `chat.message.sent`: cada instancia tiene un conjunto distinto de clientes WebSocket conectados, así que cada una necesita enterarse de **todos** los mensajes para reenviárselos a los suyos.
+- **Cola por instancia** para `chat.message.reactions-updated` (SCRUM-49), por el mismo motivo: la instancia que atiende el `PUT` o el `DELETE` de una reacción no tiene a todos los miembros del canal conectados.
 - **Cola por instancia** para `chat.voice.participants-changed` (SCRUM-54): el webhook de LiveKit llega a una sola instancia, pero los clientes que miran la lista de participantes están conectados a cualquiera, así que cada instancia tiene que enterarse de **todos** los cambios para reenviárselos a los suyos. Es el mismo problema y la misma solución que `chat.message.sent`.
 - **Cola por instancia** para `identity.user.suspended`: los sockets del usuario suspendido pueden estar en cualquier instancia, así que todas tienen que enterarse para cerrar los suyos.
 - **Cola compartida** `chat.voice-access` para cortar las llamadas de voz de quien pierde el acceso (SCRUM-51): se bindea a `community.member.left`, `community.channel.deleted`, `community.server.deleted`, `community.server.suspended`, `community.member.permissions-changed` e `identity.user.suspended`. Es compartida porque sacar a alguien de una sala de LiveKit es una sola llamada al proveedor, que tiene que hacer una sola instancia. Los eventos por usuario cortan sesiones registradas **antes** del `occurredAt`; el borrado de canal o servidor elimina la sala completa y sus sesiones, y la suspensión de un servidor corta sus llamadas en curso.
@@ -120,6 +121,7 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 | `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId }` | SCRUM-41 |
 | `chat.message.updated` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, editedAt }` ¹⁰ | SCRUM-44 |
 | `chat.message.deleted` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, deletedAt }` ¹⁰ | SCRUM-45 |
+| `chat.message.reactions-updated` | `chat` | `chat` (fan-out multiinstancia, cola por instancia) | `{ messageId, channelId, serverId, reactions: [{ emoji, userIds }], reactionsVersion }` ¹⁵ | SCRUM-49 |
 | `chat.membership.changed` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ serverId, userId }` ² | SCRUM-146 |
 | `chat.voice.participants-changed` | `chat` | `chat` (fan-out a sockets, cola por instancia), `metrics` (fan-out) | `{ serverId, channelId, participants: [{ userId, joinedAt }], syncedAt }` | SCRUM-54; ADR-0017 |
 | `chat.read-state.updated` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ userId, states: [{ channelId, serverId, lastReadMessageId, lastReadAt }] }` ⁹ | SCRUM-75, SCRUM-76 |
@@ -217,6 +219,15 @@ Y las que agrega `channelOverrides` (ADR-0012):
    - **Qué hace `chat` con `suspended`:** guarda la marca en su proyección (`suspendedServers`) y desde ahí rechaza con `forbidden` los mensajes nuevos y la entrada a la voz de ese servidor; corta las llamadas en curso (`chat.voice-access`) y avisa a cada miembro con `server` y `servers` para que el cliente relea. `reactivated` quita la marca y vuelve a avisar.
    - **Qué sigue respondiendo:** `community` saca el servidor de `GET /servers/`, pero `GET /servers/{serverId}` y el historial de mensajes siguen respondiendo.
    - **Idempotencia y orden:** la marca se aplica por `occurredAt` (`applyIfNewer`), así que un `suspended` atrasado no vuelve a bloquear un servidor ya reactivado, y un duplicado no cambia nada.
+
+¹⁵ **Reacciones a un mensaje** (SCRUM-49). Es la continuación de la nota ¹⁰: el mensaje es de `chat`, así que el frame que llega al cliente (`message.reactions`) lleva los datos y no es un `invalidate` ([ADR-0017](../adr/0017-eventos-de-ui-por-el-websocket.md)). Va por **cola por instancia** y cada una hace `Broadcast(serverId)` a los miembros con `VIEW_CHANNEL`, incluido quien reaccionó. Si se declara por error como cola compartida, la reacción le llega a una fracción de los clientes, sin ningún error.
+   - **Cuándo se publica:** después de confirmar la escritura en Mongo, y **solo si algo cambió**. Reaccionar con un emoji que el usuario ya puso, o quitar uno que no tenía, responde bien pero no publica.
+   - **Payload completo, no un delta.** `reactions` trae todas las reacciones del mensaje después del cambio (`[{ emoji, userIds }]`, hasta 20 emojis distintos), con la forma de `Reaction` en [`contratos/chat.yaml`](contratos/chat.yaml). Así el consumidor no necesita el estado anterior para aplicarlo.
+   - **Idempotencia y orden:** `reactionsVersion` sube en 1 con cada cambio, en la misma escritura atómica de Mongo que lo produce. El cliente aplica el frame **solo si su `reactionsVersion` es mayor** que el que ya tiene para ese mensaje: un duplicado no cambia nada, y dos reacciones casi simultáneas publicadas por instancias distintas no dejan fija la vieja si llegan al revés. No se usa el `occurredAt`, porque dos cambios en el mismo milisegundo empatarían.
+   - **Permiso:** agregar exige `ADD_REACTIONS` (`1 << 11`, en el rol por defecto, SCRUM-178). Quitar la propia solo pide `VIEW_CHANNEL`, como borrar un mensaje propio.
+   - **Mensajes borrados:** un mensaje borrado no acepta reacciones (`404`) y nunca vuelve a mostrar las que tenía. El borrado no publica este evento: el `message.deleted` ya saca el mensaje entero.
+   - **Lo que el bus no cubre:** una sesión desconectada no recibe estos frames. Al reconectar, el historial trae `reactions` y `reactionsVersion` de cada mensaje, y el cliente se queda con el de versión mayor.
+   - **Sin datos personales:** solo ids y emojis.
 
 ## Nota sobre los dos lenguajes
 
