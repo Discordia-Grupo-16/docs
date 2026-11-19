@@ -255,6 +255,151 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /channels/{channelId}/messages/{messageId}/reactions/{emoji}:
+    put:
+      summary: Reaccionar a un mensaje
+      description: >
+        SCRUM-49, CA1 y CA3. Agrega la reacción del usuario con ese emoji. Hace
+        falta ser miembro activo del servidor con `VIEW_CHANNEL` y
+        `ADD_REACTIONS` (`1 << 11`, en el rol por defecto). Un servidor
+        suspendido rechaza las reacciones nuevas igual que los mensajes
+        nuevos (nota ¹³ de `eventos.md`).
+
+        El toggle del CA2 lo resuelve el cliente: manda `PUT` si el usuario
+        todavía no reaccionó con ese emoji y `DELETE` si ya lo hizo. Del
+        lado del servidor los dos son idempotentes, así que un doble click o
+        un reintento no duplican nada.
+
+        Orden de las validaciones: `X-User-Id` y UUID (401/400), canal (404),
+        membresía y permisos (403), emoji (400) y, en la misma escritura, que
+        el mensaje exista en el canal y no esté borrado (404) y que no supere
+        el límite de 20 emojis distintos (409). Así un 403 por permisos nunca
+        depende del emoji.
+
+        Si el usuario ya había reaccionado con ese emoji, responde `200` con
+        el estado vigente, **sin** subir `reactionsVersion` y **sin**
+        publicar nada. Si cambió, `chat` publica
+        `chat.message.reactions-updated` y los miembros del canal reciben el
+        frame `message.reactions`, incluido quien reaccionó.
+      operationId: addReaction
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ChannelId'
+        - $ref: '#/components/parameters/MessageId'
+        - $ref: '#/components/parameters/Emoji'
+      responses:
+        '200':
+          description: Las reacciones del mensaje después del pedido.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MessageReactions'
+        '400':
+          description: UUID malformado, o `emoji` no es un único emoji Unicode de hasta 32 bytes.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: >
+            El usuario no es miembro activo del servidor, le falta
+            `VIEW_CHANNEL` o `ADD_REACTIONS`, o el servidor está suspendido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El canal no existe, o el mensaje no existe en ese canal o está borrado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >
+            El mensaje ya tiene reacciones con 20 emojis distintos y este es
+            uno nuevo. Sumarse a un emoji que ya está sigue funcionando.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Quitar la reacción propia
+      description: >
+        SCRUM-49, CA2. Quita la reacción del usuario con ese emoji. Solo
+        quita la propia: no hay forma de borrar la reacción de otro. Hace
+        falta ser miembro activo con `VIEW_CHANNEL`, pero **no**
+        `ADD_REACTIONS`: igual que borrar un mensaje propio (SCRUM-45),
+        retirar lo que uno puso tiene que poder hacerse siempre, aunque le
+        hayan sacado el permiso o el servidor esté suspendido.
+
+        Mismo orden de validaciones que el `PUT`, sin el 409. Si el usuario no
+        tenía esa reacción, responde `200` con el estado vigente, sin subir
+        `reactionsVersion` y sin publicar nada. Si quitó la última reacción
+        de un emoji, el emoji sale de la lista.
+      operationId: removeReaction
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ChannelId'
+        - $ref: '#/components/parameters/MessageId'
+        - $ref: '#/components/parameters/Emoji'
+      responses:
+        '200':
+          description: Las reacciones del mensaje después del pedido.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MessageReactions'
+        '400':
+          description: UUID malformado, o `emoji` no es un único emoji Unicode de hasta 32 bytes.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: El usuario no es miembro activo del servidor, o le falta `VIEW_CHANNEL`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El canal no existe, o el mensaje no existe en ese canal o está borrado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /channels/{channelId}/ws:
     get:
       summary: WebSocket upgrade endpoint for a channel
@@ -687,11 +832,26 @@ components:
         type: string
         format: uuid
       description: Mensaje del canal indicado en `channelId`.
+    Emoji:
+      in: path
+      name: emoji
+      required: true
+      schema:
+        type: string
+        maxLength: 32
+      example: "%F0%9F%91%8D"
+      description: >
+        SCRUM-49. Un único emoji Unicode, codificado en UTF-8 y con
+        percent-encoding en el path (`👍` viaja como `%F0%9F%91%8D`). Vale
+        un emoji con sus variantes: tono de piel, secuencias ZWJ, banderas y
+        keycaps. Tiene que ser un solo grafema y ocupar hasta 32 bytes. Un
+        texto común, varios emojis juntos o un emoji personalizado responden
+        `400`.
 
   schemas:
     Message:
       type: object
-      required: [messageId, channelId, serverId, authorId, content, createdAt, editedAt, clientMessageId]
+      required: [messageId, channelId, serverId, authorId, content, createdAt, editedAt, clientMessageId, reactions, reactionsVersion]
       properties:
         messageId:
           type: string
@@ -728,6 +888,105 @@ components:
           type: string
           format: uuid
           description: ID generado por el cliente al enviar. Permite deduplicar mensajes recibidos por WebSocket y por HTTP al reconectar.
+        reactions:
+          type: array
+          description: >
+            Reacciones del mensaje (SCRUM-49), una entrada por emoji, en el
+            orden en que cada emoji se agregó por primera vez. Un emoji sin
+            usuarios no aparece. Es una lista vacía si el mensaje no tiene
+            reacciones, incluidos los mensajes guardados antes de SCRUM-49.
+            `message.created` y el ack de `message.send` no cambian de forma:
+            un mensaje recién enviado no tiene reacciones.
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/Reaction'
+        reactionsVersion:
+          type: integer
+          minimum: 0
+          description: >
+            Contador que sube en 1 con cada cambio de `reactions` del mensaje,
+            y `0` si nunca tuvo. El cliente aplica un `message.reactions`
+            solo si su `reactionsVersion` es mayor que el que ya tiene para
+            ese mensaje: así un frame repetido o que llega fuera de orden no
+            retrocede las reacciones.
+
+    Reaction:
+      type: object
+      description: >
+        Un emoji y quiénes reaccionaron con él (SCRUM-49). El cliente cuenta
+        las reacciones con `userIds.length` y resalta la propia si su
+        `userId` está en la lista.
+      required: [emoji, userIds]
+      properties:
+        emoji:
+          type: string
+          maxLength: 32
+          description: >
+            Un emoji Unicode, tal como lo eligió el usuario (ver el parámetro
+            `Emoji`).
+          example: "👍"
+        userIds:
+          type: array
+          minItems: 1
+          description: Referencias a User.id en `identity`, en el orden en que reaccionaron. Sin repetidos.
+          items:
+            type: string
+            format: uuid
+
+    MessageReactionsFrame:
+      type: object
+      description: >
+        Frame (SCRUM-49) que `chat` envía por el WebSocket de chat cuando
+        cambian las reacciones de un mensaje. Se entrega con
+        `Broadcast(serverId)`, solo a los miembros con `VIEW_CHANNEL`,
+        incluido quien reaccionó. Lleva la lista **completa** de reacciones y
+        no un delta, y no es un `invalidate`, porque el mensaje es de `chat`
+        (ADR-0017). Nace del evento `chat.message.reactions-updated`. Si el
+        cliente no tiene el mensaje cargado, lo ignora.
+      required: [type, messageId, channelId, serverId, reactions, reactionsVersion]
+      properties:
+        type:
+          type: string
+          enum: [message.reactions]
+        messageId:
+          type: string
+          format: uuid
+        channelId:
+          type: string
+          format: uuid
+        serverId:
+          type: string
+          format: uuid
+        reactions:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/Reaction'
+        reactionsVersion:
+          type: integer
+          minimum: 1
+          description: Misma regla que en `Message.reactionsVersion`.
+
+    MessageReactions:
+      type: object
+      description: >
+        Respuesta del `PUT` y del `DELETE` de una reacción: el estado de las
+        reacciones del mensaje después del pedido, con la misma forma que el
+        frame `message.reactions`. Le permite al cliente que reaccionó
+        confirmar su cambio sin esperar el frame.
+      required: [messageId, reactions, reactionsVersion]
+      properties:
+        messageId:
+          type: string
+          format: uuid
+        reactions:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/Reaction'
+        reactionsVersion:
+          type: integer
+          minimum: 0
 
     SendOrEditMessageEvent:
       type: object

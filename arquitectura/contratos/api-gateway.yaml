@@ -15,6 +15,7 @@ info:
     - /api/v1/servers*, /api/v1/invites* → community
     - /api/v1/channels/{channelId}/messages,
       /api/v1/channels/{channelId}/messages/{messageId},
+      /api/v1/channels/{channelId}/messages/{messageId}/reactions/{emoji},
       /api/v1/channels/{channelId}/ws,
       /api/v1/channels/{channelId}/voice-tokens,
       /api/v1/channels/{channelId}/read, /api/v1/users/me/unread,
@@ -1136,6 +1137,82 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /api/v1/channels/{channelId}/messages/{messageId}/reactions/{emoji}:
+    put:
+      summary: '[proxy → chat-y-real-time] Reaccionar a un mensaje'
+      description: >
+        SCRUM-49. El gateway reenvía el emoji tal como llegó, con su
+        percent-encoding: no lo decodifica ni lo valida. La validación es de
+        `chat`.
+      operationId: gatewayAddReaction
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+        - $ref: '#/components/parameters/MessageId'
+        - $ref: '#/components/parameters/Emoji'
+      responses:
+        '200':
+          description: Ver chat.yaml → PUT /channels/{channelId}/messages/{messageId}/reactions/{emoji}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'chat.yaml#/components/schemas/MessageReactions'
+        '400':
+          description: UUID malformado o emoji inválido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      summary: '[proxy → chat-y-real-time] Quitar la reacción propia'
+      operationId: gatewayRemoveReaction
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+        - $ref: '#/components/parameters/MessageId'
+        - $ref: '#/components/parameters/Emoji'
+      responses:
+        '200':
+          description: Ver chat.yaml → DELETE /channels/{channelId}/messages/{messageId}/reactions/{emoji}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'chat.yaml#/components/schemas/MessageReactions'
+        '400':
+          description: UUID malformado o emoji inválido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   /api/v1/channels/{channelId}/ws:
     get:
       summary: '[proxy → chat-y-real-time] Upgrade a WebSocket para un canal'
@@ -1861,6 +1938,14 @@ components:
       schema:
         type: string
         format: uuid
+    Emoji:
+      in: path
+      name: emoji
+      required: true
+      schema:
+        type: string
+        maxLength: 32
+      description: Un emoji Unicode con percent-encoding (ver `Emoji` en chat.yaml).
     RoleId:
       in: path
       name: roleId
