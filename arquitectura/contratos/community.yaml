@@ -773,6 +773,37 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /servers/{serverId}/invites:
+    get:
+      summary: Listar las invitaciones del servidor
+      description: >
+        Las invitaciones del servidor, para gestionarlas y revocarlas (CA4 de
+        "Generar invitación"). Requiere `CREATE_INVITE` en el servidor; el
+        owner y quien tiene `ADMINISTRATOR` lo tienen siempre.
+      operationId: listInvites
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/XUserRole'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: Invitaciones del servidor.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Invite'
+        '403':
+          description: El usuario no tiene `CREATE_INVITE` en este servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
     post:
       summary: Generar una invitación al servidor
       description: >
