@@ -689,6 +689,27 @@ components:
       description: Mensaje del canal indicado en `channelId`.
 
   schemas:
+    Attachment:
+      description: >
+        Archivo adjunto en un mensaje. El cliente lo sube primero con
+        `POST /api/v1/files/upload` (community) y obtiene la URL; después
+        la incluye en el `MessageSendFrame` (SCRUM-48).
+      type: object
+      required: [url, filename, contentType]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: URL pública de Cloudinary donde está almacenado el archivo.
+        filename:
+          type: string
+          description: Nombre original del archivo.
+        contentType:
+          type: string
+          description: >
+            MIME type del archivo. Valores aceptados: `image/jpeg`, `image/png`,
+            `image/gif`, `image/webp`, `application/pdf`, `text/plain`.
+
     Message:
       type: object
       required: [messageId, channelId, serverId, authorId, content, createdAt, editedAt, clientMessageId]
@@ -728,6 +749,11 @@ components:
           type: string
           format: uuid
           description: ID generado por el cliente al enviar. Permite deduplicar mensajes recibidos por WebSocket y por HTTP al reconectar.
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+          description: Archivos adjuntos al mensaje (SCRUM-48). Ausente si el mensaje no tiene adjuntos.
 
     SendOrEditMessageEvent:
       type: object
@@ -746,6 +772,15 @@ components:
           type: string
           minLength: 1
           maxLength: 2000
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+          description: >
+            Archivos adjuntos al mensaje (SCRUM-48). Cada uno debe tener un
+            `contentType` en la lista permitida; si no, el servidor responde
+            con `UNSUPPORTED_ATTACHMENT_FORMAT`. El tamaño se valida en el
+            upload (`POST /api/v1/files/upload`), no acá.
 
     MessageUpdatedFrame:
       type: object
