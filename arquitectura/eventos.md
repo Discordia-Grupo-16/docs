@@ -117,7 +117,7 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 | `community.server.ownership-transferred` | `community` | `chat` (avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ serverId, previousOwnerId, newOwnerId }` ⁸ | SCRUM-35; ADR-0017 |
 | `community.server.ownership-transfer-changed` | `community` | `chat` (avisos de UI, cola por instancia ⁷) | `{ serverId, fromUserId, toUserId }` ⁸ | SCRUM-35; ADR-0017 |
 | `community.role.deleted` | `community` | `chat` (avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ serverId, roleId }` ¹¹ | SCRUM-64; ADR-0017 |
-| `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId }` | SCRUM-41 |
+| `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId, attachments? }` | SCRUM-41, SCRUM-48 |
 | `chat.message.updated` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, editedAt }` ¹⁰ | SCRUM-44 |
 | `chat.message.deleted` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, deletedAt }` ¹⁰ | SCRUM-45 |
 | `chat.membership.changed` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ serverId, userId }` ² | SCRUM-146 |
