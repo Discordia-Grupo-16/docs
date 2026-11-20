@@ -94,6 +94,7 @@ Sobre ese exchange hay dos formas de declarar una cola, y **no son intercambiabl
 - **Cola compartida** `chat.voice-access` para cortar las llamadas de voz de quien pierde el acceso (SCRUM-51): se bindea a `community.member.left`, `community.channel.deleted`, `community.server.deleted`, `community.server.suspended`, `community.member.permissions-changed` e `identity.user.suspended`. Es compartida porque sacar a alguien de una sala de LiveKit es una sola llamada al proveedor, que tiene que hacer una sola instancia. Los eventos por usuario cortan sesiones registradas **antes** del `occurredAt`; el borrado de canal o servidor elimina la sala completa y sus sesiones, y la suspensión de un servidor corta sus llamadas en curso.
 - **Cola por instancia** para `chat.membership.changed`, el relevo interno de membresías: la instancia que aplica un `member.joined` o `.left` a la proyección no sabe cuál tiene al usuario conectado, así que avisa a todas y cada una actualiza las suscripciones de sus propias conexiones.
 - **Cola por instancia** para `chat.read-state.updated` (SCRUM-76): la instancia que atiende el `PUT` de lectura no sabe en cuál está conectada la otra sesión del mismo usuario, así que avisa a todas y cada una empuja el frame a las conexiones de ese `userId` que tiene.
+- **Cola por instancia** para `chat.notification-settings.updated` (SCRUM-78), por el mismo motivo que `chat.read-state.updated`. Las menciones (SCRUM-47) no suman una cola: el frame `mention` sale del mismo consumidor por instancia de `chat.message.sent`.
 
 **Riesgo a tener presente:** si `chat.message.sent` se declara por error como cola compartida, el mensaje le llega a una sola instancia — es decir, a una fracción de los usuarios conectados. No tira error, solo un cliente que nunca recibe nada, y es muy difícil de diagnosticar sin saber que la topología estaba mal desde el arranque. Por eso queda escrito acá y no solo en la cabeza de quien lo implementa.
 
@@ -114,17 +115,18 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 | `community.channel.deleted` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ channelId, serverId }` ¹ ⁷ | SCRUM-137; ADR-0017 |
 | `community.member.joined` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ serverId, userId }` ¹ | SCRUM-137; ADR-0017 |
 | `community.member.left` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, userId, reason }` ¹ ³ | SCRUM-137, SCRUM-68, SCRUM-69; ADR-0017 |
-| `community.member.permissions-changed` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions }] }` ⁴ | SCRUM-61, SCRUM-35, SCRUM-64; ADR-0017 |
+| `community.member.permissions-changed` | `community` | `chat` (proyección de autorización; avisos de UI, cola por instancia ⁷), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ serverId, members: [{ userId, permissions, roleIds }] }` ⁴ | SCRUM-61, SCRUM-35, SCRUM-64, SCRUM-47; ADR-0017 |
 | `community.server.ownership-transferred` | `community` | `chat` (avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ serverId, previousOwnerId, newOwnerId }` ⁸ | SCRUM-35; ADR-0017 |
 | `community.server.ownership-transfer-changed` | `community` | `chat` (avisos de UI, cola por instancia ⁷) | `{ serverId, fromUserId, toUserId }` ⁸ | SCRUM-35; ADR-0017 |
 | `community.role.deleted` | `community` | `chat` (avisos de UI, cola por instancia ⁷), `metrics` (fan-out) | `{ serverId, roleId }` ¹¹ | SCRUM-64; ADR-0017 |
-| `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId }` | SCRUM-41 |
-| `chat.message.updated` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, editedAt }` ¹⁰ | SCRUM-44 |
+| `chat.message.sent` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, createdAt, clientMessageId, mentions: { userIds, roleIds, everyone }, mentionedUserIds }` ¹⁶ | SCRUM-41, SCRUM-47 |
+| `chat.message.updated` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, authorId, content, editedAt, mentions: { userIds, roleIds, everyone } }` ¹⁰ ¹⁶ | SCRUM-44, SCRUM-47 |
 | `chat.message.deleted` | `chat` | `chat` (fan-out multiinstancia, cola por instancia), `metrics` (fan-out) | `{ messageId, channelId, serverId, deletedAt }` ¹⁰ | SCRUM-45 |
 | `chat.message.reactions-updated` | `chat` | `chat` (fan-out multiinstancia, cola por instancia) | `{ messageId, channelId, serverId, reactions: [{ emoji, userIds }], reactionsVersion }` ¹⁵ | SCRUM-49 |
 | `chat.membership.changed` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ serverId, userId }` ² | SCRUM-146 |
 | `chat.voice.participants-changed` | `chat` | `chat` (fan-out a sockets, cola por instancia), `metrics` (fan-out) | `{ serverId, channelId, participants: [{ userId, joinedAt }], syncedAt }` | SCRUM-54; ADR-0017 |
 | `chat.read-state.updated` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ userId, states: [{ channelId, serverId, lastReadMessageId, lastReadAt }] }` ⁹ | SCRUM-75, SCRUM-76 |
+| `chat.notification-settings.updated` | `chat` | `chat` (relevo entre instancias, cola por instancia) | `{ userId, setting: { scopeType, scopeId, serverId, level, muted, updatedAt } }` ¹⁷ | SCRUM-77, SCRUM-78 |
 | `identity.user.suspended` | `identity` | `chat` (cierre de sockets, cola por instancia), `chat` (corte de voz, cola compartida `chat.voice-access`), `metrics` (fan-out) | `{ userId, suspendedBy }` ⁵ | SCRUM-81 |
 | `identity.user.reactivated` | `identity` | `metrics` (fan-out) | `{ userId, reactivatedBy }` ⁵ | SCRUM-82 |
 | `identity.user.profile-updated` | `identity` | `chat` (aviso a los clientes conectados, cola por instancia), `metrics` (fan-out) | `{ userId }` ⁶ | SCRUM-167 |
@@ -141,8 +143,8 @@ Las reglas de ack, prefetch, backoff y dead-letter (sección anterior) aplican i
 {
   "serverId": "0f4e...",
   "members": [
-    { "userId": "a1b2...", "permissions": 73, "channelOverrides": { "9f1c...": 1 } },
-    { "userId": "c3d4...", "permissions": 511 }
+    { "userId": "a1b2...", "permissions": 73, "roleIds": ["5e6f..."], "channelOverrides": { "9f1c...": 1 } },
+    { "userId": "c3d4...", "permissions": 511, "roleIds": [] }
   ]
 }
 ```
@@ -166,6 +168,15 @@ Y las que agrega `channelOverrides` (ADR-0012):
 - **Se publica además** al crear, editar o borrar una excepción de canal, y al borrar un canal que tenía una.
 - **Compatible hacia atrás:** un consumidor que ignore el campo sigue funcionando con permisos por servidor. Es lo que permite implementarlo por capas.
 - **Lo que esto habilita en `chat`:** el broadcast deja de poder mandar cada mensaje a todas las conexiones del servidor. Un mensaje de un canal que el usuario no puede ver no tiene que salir hacia él, así que el hub pasa a filtrar por canal (ver las consecuencias del ADR-0012).
+
+Y las que agrega `roleIds` (SCRUM-47):
+
+- **Qué es:** los ids de **todos** los roles asignados al miembro en ese momento, incluido el rol por defecto, que `community` le asigna como cualquier otro al entrar. Una lista vacía es un miembro sin roles, como un owner que no se asignó ninguno.
+- **Para qué lo quiere `chat`:** solo para resolver una mención a un rol (`<@&roleId>`, nota ¹⁶). `chat` sigue sin rehacer el OR ni conocer qué permite cada rol: los permisos siguen llegando resueltos en `permissions`.
+- **No se publica más seguido que hoy.** Los roles de un miembro cambian en los mismos casos en que ya se publica el evento: al asignar o quitar un rol, al entrar al servidor y al borrar un rol que tenía (nota ¹¹). Editar los permisos de un rol vuelve a mandar los mismos `roleIds`, que no hace daño.
+- **Misma regla de orden:** `roleIds` se guarda en la misma escritura que `permissions`, con el mismo `lastEventAt`. Llega siempre completo, nunca como delta.
+- **Compatible hacia atrás:** un consumidor que ignore el campo sigue funcionando. Si `chat` recibe una entrada sin `roleIds` (un evento publicado antes del cambio), no toca los que tenía guardados.
+- **Sale en el mismo cambio de contrato que `channelOverrides`** (D5 y D10 del plan del Sprint 4): las dos tocan este evento y conviene que `community` publique los dos campos en una sola versión.
 
 ⁵ Suspensión de cuentas. `userId` es la cuenta suspendida o reactivada; `suspendedBy` y `reactivatedBy`, el `userId` del staff que hizo la acción (queda para la auditoría). El momento es el `occurredAt` del envelope: no se repite en `data`.
 
@@ -199,7 +210,7 @@ Y las que agrega `channelOverrides` (ADR-0012):
 ⁹ **Estado de lectura** (SCRUM-75 y SCRUM-76). Es un relevo interno de `chat`, como el de la nota ², pero con datos: el estado de lectura es de `chat` y no de otro servicio, así que el frame que llega al cliente (`read-state.updated`) lleva el contenido y no es un `invalidate` (regla del [ADR-0017](../adr/0017-eventos-de-ui-por-el-websocket.md): se invalida solo lo que es de otro servicio). Lo publica la instancia que aplicó un `PUT /channels/{channelId}/read` o un `PUT /users/me/read-all` **solo si cambió algo**, y cada instancia lo entrega a las conexiones de `userId` que tiene abiertas. `states` trae un elemento por canal que avanzó (uno en el `PUT` de un canal, todos los que cambiaron en el de "marcar todo").
    - **Idempotencia y orden:** el estado de un canal solo avanza. Se ordena por `(createdAt, messageId)` del mensaje, la misma tupla que usa el historial, así que un evento repetido o fuera de orden no retrocede nada: el cliente aplica `lastReadMessageId` solo si es posterior al que ya tiene.
    - **Qué no publica:** el avance de lectura del autor al enviar un mensaje. Sus otras sesiones ya reciben el `message.created` con su propio `authorId` y lo deducen solas.
-   - **Menciones:** el `GET` de no leídos devuelve un `mentionCount` por canal que vale siempre `0` hasta que exista la optativa "Menciones". El evento no lo lleva.
+   - **Menciones:** el `GET` de no leídos devuelve un `mentionCount` por canal, que desde SCRUM-47 se calcula al leer (nota ¹⁶). El evento no lo lleva: marcar leído un canal pone su cuenta en cero, y el cliente lo deduce solo.
 
 ¹⁰ **Edición y borrado de mensajes** (SCRUM-44 y SCRUM-45). Son la continuación de `chat.message.sent`: mismo problema (cada instancia tiene sus propios sockets), misma solución (**cola por instancia**, y cada una hace `Broadcast(serverId)` del frame `message.updated` o `message.deleted`). Si se declaran por error como cola compartida, el cambio le llega a una fracción de los clientes, sin ningún error. Los destinatarios son los miembros con `VIEW_CHANNEL`.
    - **Cuándo se publican:** después de confirmar la escritura en Mongo, y **solo si algo cambió**. Una edición con el mismo contenido y un borrado de un mensaje ya borrado responden bien pero no publican.
@@ -228,6 +239,26 @@ Y las que agrega `channelOverrides` (ADR-0012):
    - **Mensajes borrados:** un mensaje borrado no acepta reacciones (`404`) y nunca vuelve a mostrar las que tenía. El borrado no publica este evento: el `message.deleted` ya saca el mensaje entero.
    - **Lo que el bus no cubre:** una sesión desconectada no recibe estos frames. Al reconectar, el historial trae `reactions` y `reactionsVersion` de cada mensaje, y el cliente se queda con el de versión mayor.
    - **Sin datos personales:** solo ids y emojis.
+
+¹⁶ **Menciones** (SCRUM-47). No tienen evento propio: viajan dentro de `chat.message.sent`, y la "notificación destacada" en vivo es el frame `mention` ([`contratos/chat.yaml`](contratos/chat.yaml), `MentionFrame`). Las marcas y sus reglas están en el schema `Mentions` de ese archivo.
+   - **Qué suma al payload:** `mentions` (`{ userIds, roleIds, everyone }`), lo que quedó guardado en el mensaje; y `mentionedUserIds`, los usuarios a los que hay que avisar, ya resueltos: los de `mentions.userIds` más los miembros activos con `VIEW_CHANNEL` que tienen alguno de `mentions.roleIds`, sin repetidos y sin el autor. Va vacío si no hay menciones y también si `everyone` es `true`.
+   - **Por qué dentro de `chat.message.sent` y no en un evento aparte:** el aviso sale junto con el mensaje o no sale ninguno de los dos. Con dos eventos podría publicarse uno sin el otro. Además no hace falta otra cola: el consumidor por instancia que ya hace `Broadcast(serverId)` del `message.created` manda también el `mention`, con `SendToUser` a cada uno de `mentionedUserIds` que tenga conectado.
+   - **Por qué resuelve la instancia que guarda:** resolver un rol es una consulta a la proyección. Se hace una sola vez, al guardar, y no una vez por instancia.
+   - **`@everyone` no se lista:** con `everyone` en `true` el `mention` sale por `Broadcast(serverId)`, que ya llega solo a quienes tienen `VIEW_CHANNEL`, y el cliente descarta el suyo si es el autor. Así el evento no crece con el tamaño del servidor. Un rol con muchos miembros sí se lista: en un servidor de este trabajo son decenas de ids.
+   - **Permiso:** `@everyone` y las menciones a roles exigen `MENTION_EVERYONE` (`1 << 12`, fuera del rol por defecto, SCRUM-178). Sin él quedan como texto y no avisan (CA4). Mencionar a un usuario no pide nada más que poder enviar el mensaje.
+   - **Roles:** `chat` conoce los roles de cada miembro por el `roleIds` de `community.member.permissions-changed` (nota ⁴). Un rol mencionado que nadie tiene no avisa a nadie.
+   - **El contador se calcula al leer.** El `mentionCount` del `GET /users/me/unread` cuenta los mensajes no leídos cuyo `mentions` incluye al usuario, con los roles que tiene **al leer**. Si alguien gana o pierde un rol después de un mensaje, el contador puede diferir de los `mention` que recibió en vivo, y se corrige en el siguiente `GET`.
+   - **Desde cuándo cuenta:** si el usuario nunca marcó un canal, cuenta desde que entró al servidor. Para eso la proyección de `chat` guarda `joinedAt`, el `occurredAt` del `community.member.joined` que activó la membresía. El evento de `community` no cambia.
+   - **Edición:** `chat.message.updated` lleva `mentions` recalculado, pero no `mentionedUserIds`: editar no avisa. El contador ya refleja el cambio, porque se calcula al leer.
+   - **Idempotencia:** el cliente cuenta `messageId` distintos, así que un `mention` duplicado no suma dos veces. El `message.created` duplicado ya se deduplicaba por `messageId`.
+   - **Lo que el bus no cubre:** una sesión desconectada no recibe el `mention`. Al reconectar, el `GET /users/me/unread` trae el `mentionCount` de cada canal.
+   - **Sin datos personales:** solo ids. El nombre del mencionado lo resuelve el cliente con `identity`, como el del autor.
+
+¹⁷ **Preferencias de notificación** (SCRUM-77 y SCRUM-78). Es un relevo interno de `chat` con datos, como el de la nota ⁹: las preferencias son de `chat`, así que el frame `notification-settings.updated` lleva el ajuste y no es un `invalidate` ([ADR-0017](../adr/0017-eventos-de-ui-por-el-websocket.md)). Lo publica la instancia que aplicó un `PUT` o un `DELETE` de `/users/me/notification-settings/...` **solo si cambió algo**, y cada instancia lo entrega a las conexiones de `userId` que tiene abiertas.
+   - **El borrado no tiene forma propia:** un `DELETE` publica el ajuste con `level: null` y `muted: false`, que equivale al valor por defecto. Así el cliente aplica los dos casos igual.
+   - **Idempotencia y orden:** el cliente aplica `setting` solo si su `updatedAt` es más nuevo que el que tiene para ese alcance (`scopeType` y `scopeId`). Un duplicado o dos cambios desde dos dispositivos que llegan al revés no dejan fijo el viejo.
+   - **Qué hace el cliente con él:** actualiza su lista de ajustes y vuelve a pedir `GET /users/me/unread`, que trae el `notificationLevel` de cada canal ya resuelto. La resolución entre canal, servidor y silencio vive solo en `chat`.
+   - **Sin datos personales:** solo ids y el nivel elegido.
 
 ## Nota sobre los dos lenguajes
 
