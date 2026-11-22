@@ -1,9 +1,10 @@
 # ADR-0012: Permisos por canal, como excepción sobre el modelo del ADR-0011
 
-- **Estado:** Propuesto
-- **Fecha:** 2026-10-10
-- **Decisores:** Persona 2 (dueña de Roles y Permisos en el CP2) propone — pendiente de aval del
-  equipo en la weekly, porque cambia el payload de un evento y el hub de `chat`
+- **Estado:** Aceptado
+- **Fecha:** 2026-11-16 (propuesto el 2026-10-10)
+- **Decisores:** Persona 2 (dueña de Roles y Permisos en el CP2) propone; el equipo lo aprueba sin
+  cambios en el taller de contratos de la entrega final (INF-31, 16/11), porque cambia el payload de
+  un evento y el hub de `chat`
 - **Servicios afectados:** `community`, `chat-and-real-time`, `web-app`, `mobile`
 
 > Este ADR **modifica parcialmente** al [ADR-0011](0011-roles-y-permisos-en-community.md): deja sin
