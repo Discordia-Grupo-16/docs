@@ -153,6 +153,27 @@ de idempotencia están en [`eventos.md`](../arquitectura/eventos.md).
 El bitmask **no viaja en el JWT**: cambia sin que el token cambie, y un token vive más que una
 edición de permisos.
 
+### Los roles de cada miembro, solo para las menciones (SCRUM-47)
+
+Desde el Sprint 4 cada entrada de `members` lleva también **`roleIds`**: los ids de todos los roles
+que el miembro tiene en ese momento, incluido el rol por defecto.
+
+```json
+{ "userId": "a1b2...", "permissions": 73, "roleIds": ["5e6f..."] }
+```
+
+Esto no cambia la decisión de arriba. **`chat` conoce los `roleIds` únicamente para resolver una
+mención a un rol** (`<@&roleId>`): necesita saber a quiénes avisarle. Sigue sin rehacer el OR de los
+permisos, sin conocer qué permite cada rol y sin la jerarquía: lo que un miembro puede hacer sigue
+saliendo del bitmask que `community` ya calculó. Si `chat` usara los `roleIds` para decidir un
+permiso, estaría repitiendo la regla en dos lugares, que es lo que este ADR evita.
+
+Se agregó al mismo evento y no a uno nuevo porque los roles de un miembro cambian en los mismos casos
+en que ya se publica (asignar o quitar un rol, entrar al servidor, borrar un rol), y así el
+bitmask y los roles llegan juntos, con el mismo orden y la misma regla de idempotencia. El campo es
+compatible hacia atrás: un consumidor que lo ignore sigue funcionando, y un evento sin él no pisa los
+roles que `chat` ya tenía guardados. Detalle en la nota ⁴ de [`eventos.md`](../arquitectura/eventos.md).
+
 ## Consecuencias
 
 **Positivas**
