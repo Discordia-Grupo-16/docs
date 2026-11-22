@@ -174,7 +174,12 @@ paths:
                   data:
                     $ref: '#/components/schemas/Message'
         '400':
-          description: UUID malformado, el body no es JSON, o `content` vacío o de más de 2000 caracteres.
+          description: >
+            UUID malformado, el body no es JSON, o `content` vacío o de más
+            de 2000 caracteres. También si el `content` nuevo menciona a más
+            de 20 usuarios o 5 roles distintos (SCRUM-47): es la misma regla
+            que el `TOO_MANY_MENTIONS` del envío por el WebSocket, y no se
+            guarda nada.
           content:
             application/problem+json:
               schema:
@@ -1526,7 +1531,14 @@ components:
             que acaba de entrar. Se cuenta hasta 100, y el cliente muestra
             "99+".
         notificationLevel:
-          $ref: '#/components/schemas/NotificationLevel'
+          allOf:
+            - $ref: '#/components/schemas/NotificationLevel'
+          description: >
+            El nivel que rige en el canal, ya resuelto (ver
+            `NotificationSetting`). Hasta que exista SCRUM-78 vale siempre
+            `mentions`, el valor por defecto: el campo está desde SCRUM-47
+            para que el cliente no cambie cuando llegue, igual que
+            `mentionCount` desde SCRUM-75.
 
     NotificationLevel:
       type: string
