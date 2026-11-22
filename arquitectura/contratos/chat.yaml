@@ -1526,9 +1526,10 @@ components:
             (SCRUM-47, y CA3 de SCRUM-75): directamente, por un rol que tiene
             hoy o con `@everyone`. Cuenta mensajes y no marcas: uno que
             menciona al usuario dos veces suma uno. No cuenta los propios ni
-            los borrados. Si el usuario nunca marcó el canal, cuenta desde
-            que entró al servidor, así un `@everyone` viejo no le llega al
-            que acaba de entrar. Se cuenta hasta 100, y el cliente muestra
+            los borrados. Cuenta desde lo último que leyó y, además, desde
+            que entró al servidor: así un `@everyone` viejo no le llega al
+            que acaba de entrar, ni al que salió y volvió a entrar conservando
+            su estado de lectura. Se cuenta hasta 100, y el cliente muestra
             "99+".
         notificationLevel:
           allOf:
