@@ -876,8 +876,13 @@ paths:
 
         Es el par del `PUT` sobre el mismo recurso y, como él, idempotente:
         afirma que el usuario no está silenciado. Levantar un silencio que no
-        existe —porque otro moderador lo levantó antes, porque ya se lo borró o
-        porque nunca lo hubo— responde `204` igual y **no publica nada**.
+        hay —porque otro moderador lo levantó antes, porque nunca lo hubo o
+        porque ya **venció**— responde `204` igual y **no publica nada**.
+
+        Un silencio vencido cuenta como "no había silencio": `community` no
+        limpia las filas vencidas, así que si la fila sigue ahí el `DELETE` la
+        borra igual, pero no hay nada que avisar (`chat` ya dejó de aplicarlo
+        al vencer) y por eso no publica.
 
         Pide `MODERATE_MEMBERS` y respeta la misma jerarquía que silenciar:
         estrictamente por encima, el owner no es blanco válido y tampoco uno
@@ -885,8 +890,9 @@ paths:
         miembro**: el silencio sobrevive a que se vaya, y el moderador tiene que
         poder levantarlo igual. Por eso el `404` es solo para el servidor.
 
-        Publica `community.member.unmuted` después del commit, **solo si había
-        un silencio que borrar**.
+        Publica `community.member.unmuted` después del commit, **solo si la
+        fila borrada seguía vigente** (`muted_until` en el futuro). Si no había
+        fila, o estaba vencida, no publica.
       operationId: unmuteMember
       parameters:
         - $ref: '#/components/parameters/XUserId'

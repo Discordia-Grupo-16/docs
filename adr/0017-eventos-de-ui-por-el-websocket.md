@@ -184,6 +184,7 @@ cuando cambia su perfil.
 | `community.member.joined` | Sí | Servidor; el usuario | `members`; `servers` |
 | `community.member.left` | Sí | Servidor; el usuario | `members`, y también `bans` si `reason` es `banned`; `servers` |
 | `community.member.permissions-changed` | Sí | Cada usuario de `members` | `permissions` y `channels` de ese servidor |
+| `community.member.muted` y `unmuted` | Sí | Servidor; el usuario | `members`; `permissions` de ese servidor |
 | `community.server.created` | Sí | El owner, por sus otras sesiones | `servers` |
 | `identity.user.profile-updated` | No (`identity`) | El usuario; sus servidores | `profile`; `members` con `userId` |
 | `community.server.layout-updated` | No (`community`) | Servidor | `channels` |
