@@ -122,13 +122,17 @@ paths:
         editado (`editedAt`). Solo lo puede editar su autor, y mientras siga
         siendo miembro activo del servidor con `VIEW_CHANNEL` y
         `SEND_MESSAGES`: a quien le sacaron el permiso de escribir no se le
-        deja reescribir lo que ya dijo. Las reglas del `content` son las del
+        deja reescribir lo que ya dijo. Lo mismo vale para un autor silenciado
+        por un moderador (SCRUM-71): mientras dure el silencio no puede editar,
+        aunque conserve el permiso. Borrar un mensaje propio no se bloquea.
+        Las reglas del `content` son las del
         envío (1 a 2000 caracteres, sin contar el espacio en los bordes).
 
         Orden de las validaciones: `X-User-Id` y UUID (401/400), canal (404),
-        membresía y permisos (403), body (400) y, en la misma escritura, que el
-        mensaje exista en el canal, no esté borrado (404) y sea del usuario
-        (403). Así un 403 por permisos nunca depende del contenido.
+        membresía, permisos y silencio (403), body (400) y, en la misma
+        escritura, que el mensaje exista en el canal, no esté borrado (404) y
+        sea del usuario (403). Así un 403 por permisos nunca depende del
+        contenido.
 
         Si el `content` es igual al actual, responde `200` con el mensaje
         vigente, **sin** tocar `editedAt` y **sin** publicar nada. Si cambió,
@@ -177,7 +181,11 @@ paths:
         '403':
           description: >
             El usuario no es el autor del mensaje, o no es miembro activo del
-            servidor, o le falta `VIEW_CHANNEL` o `SEND_MESSAGES`.
+            servidor, o le falta `VIEW_CHANNEL` o `SEND_MESSAGES`, o está
+            silenciado en el servidor (SCRUM-71). En este último caso el
+            `detail` lo dice con un texto propio —no es un problema de
+            permisos, el permiso lo tiene— y el cliente no debe reintentar
+            hasta que termine el silencio.
           content:
             application/problem+json:
               schema:
@@ -289,6 +297,14 @@ paths:
         `MessageUpdatedFrame` (`message.updated`, SCRUM-44), cuando se edita
         un mensaje; y `MessageDeletedFrame` (`message.deleted`, SCRUM-45),
         cuando se borra uno.
+
+
+        Un miembro silenciado por un moderador (SCRUM-71) no puede enviar:
+        su `message.send` se responde con un `ErrorFrame` de código `MUTED`, y
+        no se guarda ni se publica nada. Es un código propio y no `FORBIDDEN`
+        para que el cliente pueda decir "estás silenciado" en vez de "no
+        tenés permiso para escribir en este canal", que sería mentira: el
+        permiso lo tiene. Sigue recibiendo los mensajes del canal.
       operationId: channelWebSocket
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -327,6 +343,14 @@ paths:
         canal (ADR-0005). Sin body. Si el usuario tenía otra sala firmada,
         `chat` lo saca de ella con el motivo `other_device`
         (ver VoiceDisconnectReason).
+
+        Un miembro silenciado por un moderador (SCRUM-71) **sí recibe el
+        token**: entra a la llamada y escucha, pero el token no le deja
+        publicar. No lleva permiso de publicar ni fuentes publicables (en
+        LiveKit la lista de fuentes reemplaza al permiso cuando está
+        presente, así que las dos van vacías). El token se firma con el
+        estado de ese momento: si el silencio vence después, el cliente pide
+        el permiso con `PUT /channels/{channelId}/voice-permissions`.
       operationId: createVoiceToken
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -342,6 +366,92 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/VoiceToken'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: >
+            El usuario no es miembro activo del servidor del canal, o le falta
+            `VIEW_CHANNEL` o `CONNECT` en el servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El canal no existe o fue borrado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: El canal existe pero no es de voz.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: La voz no está configurada en este entorno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /channels/{channelId}/voice-permissions:
+    put:
+      summary: Volver a evaluar si el usuario puede publicar en un canal de voz
+      description: >
+        SCRUM-71. Lo llama el cliente cuando cree que su silencio venció (o
+        cuando LiveKit le avisa que perdió el permiso de publicar). `chat`
+        vuelve a evaluar si el usuario puede publicar en la sala del canal y se
+        lo aplica en LiveKit. Sin body.
+
+        **`chat` no le cree al cliente:** no recibe ningún dato suyo. Mira su
+        propia proyección (`mutedUntil`) y compara con su propio reloj, así
+        que pedirlo antes de tiempo responde `canPublish: false`. Llamarlo de
+        más tampoco cambia nada: es una reevaluación, no una orden, y repetirla
+        da el mismo resultado.
+
+        Por qué existe: el permiso de publicar vive en LiveKit, que no sabe de
+        `mutedUntil`, y `chat` no está en el medio del audio ni tiene un
+        temporizador que lo devuelva (se perdería en cada deploy y con varias
+        instancias habría que elegir cuál lo corre). Si el cliente no llama, no
+        está en la sala y no hay nada que devolver. Al quitar el permiso por un
+        `community.member.muted`, en cambio, sí lo hace `chat` por su cuenta
+        (ver `eventos.md`).
+
+        `remainingSeconds` lo calcula el servidor, redondeado hacia arriba, y
+        es `0` si puede publicar: el cliente arma su temporizador con ese valor
+        y no con su reloj, que puede estar adelantado o atrasado. Si el usuario
+        no está en la sala en ese momento, es un éxito igual: no hay nada que
+        aplicar.
+
+        Las validaciones y sus códigos son los de `voice-tokens`, en el mismo
+        orden: canal (404), miembro activo con `VIEW_CHANNEL` y `CONNECT` (403)
+        y canal de voz (422).
+      operationId: refreshVoicePermissions
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ChannelId'
+      responses:
+        '200':
+          description: El estado vigente del permiso de publicar.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/VoicePublishState'
         '401':
           description: Falta el header `X-User-Id` o no es un UUID.
           content:
@@ -814,7 +924,10 @@ components:
       properties:
         token:
           type: string
-          description: JWT de acceso firmado para LiveKit. Solo permite publicar el micrófono.
+          description: >
+            JWT de acceso firmado para LiveKit. Solo permite publicar el
+            micrófono, o nada si el miembro está silenciado por un moderador
+            (SCRUM-71): en ese caso entra y escucha, pero no puede publicar.
         url:
           type: string
           description: URL `wss://` de LiveKit a la que se conecta el cliente.
@@ -845,6 +958,49 @@ components:
         - suspended
         - permissions_revoked
         - channel_deleted
+
+    VoiceMutedUntilAttribute:
+      type: string
+      description: >
+        Atributo `mutedUntil` del participante de LiveKit (SCRUM-71). No viaja
+        por HTTP: `chat` lo escribe en el mismo `UpdateParticipant` que quita o
+        devuelve el permiso de publicar, y el cliente lo lee de su participante
+        local. Es ISO-8601 en UTC con `Z` mientras no puede publicar, y la
+        cadena vacía cuando puede (así se borra).
+
+        Existe porque volver a silenciar a alguien ya silenciado deja el
+        permiso en `false` y LiveKit no avisa de un cambio de `false` a
+        `false`; el atributo sí cambia, y eso le dispara al cliente un evento
+        para que pida el permiso de nuevo con el vencimiento nuevo. El cliente
+        no lo compara con su reloj para decidir nada: usa `remainingSeconds`
+        de `PUT /channels/{channelId}/voice-permissions`.
+      example: '2026-11-23T18:30:00Z'
+
+    VoicePublishState:
+      description: >
+        Si el usuario puede publicar en la sala de voz de un canal (SCRUM-71).
+        Es lo que responde `PUT /channels/{channelId}/voice-permissions`.
+      type: object
+      required: [canPublish, mutedUntil, remainingSeconds]
+      properties:
+        canPublish:
+          type: boolean
+        mutedUntil:
+          description: >
+            Hasta cuándo está silenciado, en UTC con `Z`. `null` si no lo está
+            o si el silencio ya venció.
+          type: string
+          format: date-time
+          nullable: true
+        remainingSeconds:
+          description: >
+            Cuánto falta para que pueda publicar, redondeado hacia arriba y
+            calculado por el servidor, para que el cliente arme su temporizador
+            sin usar su reloj. `0` si puede publicar. Si el cliente llamó antes
+            de tiempo, es mayor que `0` y `canPublish` es `false`: vuelve a
+            llamar cuando se cumpla.
+          type: integer
+          minimum: 0
 
     ReadState:
       type: object
