@@ -259,6 +259,7 @@ Y las que agrega `roleIds` (SCRUM-47):
    - **Idempotencia y orden:** el cliente aplica `setting` solo si su `updatedAt` es más nuevo que el que tiene para ese alcance (`scopeType` y `scopeId`). Un duplicado o dos cambios desde dos dispositivos que llegan al revés no dejan fijo el viejo.
    - **Qué hace el cliente con él:** actualiza su lista de ajustes y vuelve a pedir `GET /users/me/unread`, que trae el `notificationLevel` de cada canal ya resuelto. La resolución entre canal, servidor y silencio vive solo en `chat`.
    - **Al dejar un servidor se borran:** cuando `chat` procesa un `community.member.left` (sea `left`, `kicked` o `banned`, nota ³), borra los ajustes del usuario en ese servidor, el del servidor y los de sus canales, y no publica este evento: el cliente los descarta al sacar el servidor de su lista. Si vuelve a entrar, arranca con el valor por defecto. Solo se borra si la membresía guardada sigue inactiva, así un `member.left` viejo que llega después de un `member.joined` nuevo no borra lo que el usuario guardó al volver.
+   - **Y al borrarse un servidor o un canal:** con `community.server.deleted`, `chat` borra los ajustes de ese servidor y de sus canales, de todos los usuarios; con `community.channel.deleted`, los de ese canal. Sin mirar nada antes, porque lo borrado no vuelve: repetir el borrado no hace daño. Tampoco publica este evento. Suspender un servidor (`community.server.suspended`) no borra nada, porque se puede reactivar.
    - **Sin datos personales:** solo ids y el nivel elegido.
 
 ## Nota sobre los dos lenguajes
