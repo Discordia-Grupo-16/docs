@@ -1535,11 +1535,12 @@ components:
           allOf:
             - $ref: '#/components/schemas/NotificationLevel'
           description: >
-            El nivel que rige en el canal, ya resuelto (ver
-            `NotificationSetting`). Hasta que exista SCRUM-78 vale siempre
-            `mentions`, el valor por defecto: el campo está desde SCRUM-47
-            para que el cliente no cambie cuando llegue, igual que
-            `mentionCount` desde SCRUM-75.
+            El nivel que rige en el canal, ya resuelto entre el canal, el
+            servidor y el silencio (ver `NotificationSetting`). Si el usuario
+            no guardó ningún ajuste vale `mentions`, el valor por defecto. El
+            campo está desde SCRUM-47 para que el cliente no cambie cuando
+            llegaron las preferencias (SCRUM-78), igual que `mentionCount`
+            desde SCRUM-75.
 
     NotificationLevel:
       type: string
