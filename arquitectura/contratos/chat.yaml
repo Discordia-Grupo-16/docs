@@ -6,7 +6,8 @@ info:
     Servicio `chat-y-real-time`. Cubre el camino crítico del Sprint 1
     (CP1): Enviar mensaje en un canal (#15); y del Sprint 2 (CP2): Historial
     y reconexión sin pérdida de mensajes (SCRUM-46) — paginación con cursor
-    (`before`/`after`) y garantía de no pérdida al reconectar.
+    (`before`/`after`) y garantía de no pérdida al reconectar; y Buscar
+    mensajes (SCRUM-50) — búsqueda por texto y por nombre de autor.
     Adaptado del contrato de referencia entregado por la cátedra: IDs pasan
     de integer a UUID para ser consistentes con `identity` y `community`, y
     channelId/authorId ahora referencian directamente los recursos de esos
@@ -17,6 +18,108 @@ servers:
     description: Entorno local (detrás del API Gateway en producción)
 
 paths:
+  /servers/{serverId}/messages/search:
+    get:
+      summary: Buscar mensajes en un servidor
+      description: >
+        SCRUM-50. Busca mensajes en todos los canales de texto del servidor
+        a los que el usuario tiene acceso (`VIEW_CHANNEL`). Requiere al menos
+        uno de los filtros `q` (texto) o `author` (nombre de autor); si
+        ninguno está presente responde `400`.
+
+        **Búsqueda por texto (`q`)**: subcadena case-insensitive sobre el
+        campo `content` del mensaje.
+
+        **Búsqueda por autor (`author`)**: subcadena case-insensitive sobre
+        `authorName`, el nombre que el autor tenía al enviar el mensaje
+        (snapshot denormalizado). Un mismo usuario puede tener mensajes con
+        nombres distintos si cambió su nombre de perfil. Los mensajes
+        anteriores a la implementación de SCRUM-50 no tienen `authorName` y
+        no aparecerán en este filtro.
+
+        **Paginación**: cursor `before` (UUID del último mensaje recibido)
+        con límite configurable (máximo 20, por defecto 20). Resultados en
+        orden descendente por fecha de creación (más nuevo primero).
+      operationId: searchMessages
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+        - in: query
+          name: q
+          required: false
+          schema:
+            type: string
+          description: Texto a buscar (subcadena case-insensitive en el contenido del mensaje).
+        - in: query
+          name: author
+          required: false
+          schema:
+            type: string
+          description: Nombre de autor a filtrar (subcadena case-insensitive en `authorName`).
+        - in: query
+          name: before
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Cursor de paginación. Devuelve mensajes anteriores a este ID.
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 20
+      responses:
+        '200':
+          description: Resultados de la búsqueda, en orden descendente por fecha.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, hasMore]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Message'
+                  hasMore:
+                    type: boolean
+                    description: true si hay más resultados disponibles con un cursor `before` más antiguo.
+        '400':
+          description: >
+            Ningún filtro provisto (`q` ni `author`), `limit` fuera de
+            rango, o `before` no es un UUID válido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID válido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: El usuario no es miembro activo del servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El servidor no existe.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno del servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /channels/{channelId}/messages:
     get:
       summary: Retrieve the message history of a channel
@@ -727,6 +830,13 @@ components:
           type: string
           format: uuid
           description: Referencia a User.id en `identity`. El cliente resuelve nombre/avatar vía identity.
+        authorName:
+          type: string
+          description: >
+            Nombre de pantalla del autor en el momento en que se envió el
+            mensaje (snapshot denormalizado, SCRUM-50). Ausente en mensajes
+            anteriores a la implementación de búsqueda. No se actualiza si el
+            usuario cambia su nombre de perfil.
         content:
           type: string
           minLength: 1
@@ -772,6 +882,13 @@ components:
           type: string
           minLength: 1
           maxLength: 2000
+        authorName:
+          type: string
+          description: >
+            Nombre de pantalla del autor al momento del envío (SCRUM-50).
+            El cliente lo incluye para que `chat` lo persista como snapshot
+            y lo pueda usar en búsquedas por autor. Campo opcional; si está
+            ausente el mensaje no es buscable por nombre.
         attachments:
           type: array
           items:
