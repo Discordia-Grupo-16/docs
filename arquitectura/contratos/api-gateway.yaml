@@ -17,6 +17,7 @@ info:
       /api/v1/channels/{channelId}/messages/{messageId},
       /api/v1/channels/{channelId}/ws,
       /api/v1/channels/{channelId}/voice-tokens,
+      /api/v1/channels/{channelId}/voice-permissions,
       /api/v1/channels/{channelId}/read, /api/v1/users/me/unread,
       /api/v1/users/me/read-all,
       /api/v1/servers/{serverId}/voice-participants,
@@ -881,6 +882,66 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/servers/{serverId}/mutes/{userId}:
+    put:
+      summary: '[proxy → community] Silenciar temporalmente a un miembro del servidor'
+      description: >
+        Pide `MODERATE_MEMBERS` y respeta la jerarquía (SCRUM-71). Body JSON
+        `{ duration_seconds }`. Idempotente: silenciar a un silenciado
+        reemplaza la duración.
+      operationId: gatewayMuteMember
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'community.yaml#/components/schemas/MuteMemberRequest'
+      responses:
+        '200':
+          description: Ver community.yaml → PUT .../mutes/{userId}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'community.yaml#/components/schemas/ServerMute'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+    delete:
+      summary: '[proxy → community] Levantar el silencio de un miembro'
+      description: >
+        Pide `MODERATE_MEMBERS` y respeta la jerarquía (SCRUM-71).
+        Idempotente: levantar un silencio que no existe es `204`.
+      operationId: gatewayUnmuteMember
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: Ver community.yaml → DELETE .../mutes/{userId}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/servers/{serverId}/invites:
     post:
       summary: '[proxy → community] Generar invitación'
@@ -1509,6 +1570,45 @@ paths:
                 properties:
                   data:
                     $ref: 'chat.yaml#/components/schemas/VoiceToken'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: Ver chat.yaml → la voz no está configurada en este entorno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/channels/{channelId}/voice-permissions:
+    put:
+      summary: '[proxy → chat-y-real-time] Volver a evaluar el permiso de publicar en un canal de voz'
+      description: >
+        SCRUM-71. Lo llama el cliente cuando cree que su silencio venció.
+        `chat` no le cree: vuelve a evaluar con su propia proyección. Sin body.
+      operationId: gatewayRefreshVoicePermissions
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+      responses:
+        '200':
+          description: Ver chat.yaml → PUT /channels/{channelId}/voice-permissions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'chat.yaml#/components/schemas/VoicePublishState'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':

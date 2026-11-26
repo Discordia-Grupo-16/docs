@@ -15,7 +15,9 @@ info:
     lo resuelve.
 
     Del CP2 cubre también Moderación: Expulsar miembro (SCRUM-68), Banear
-    miembro (SCRUM-69) y Revocar baneo (SCRUM-70).
+    miembro (SCRUM-69) y Revocar baneo (SCRUM-70). Del Sprint 4 suma
+    Silenciar temporalmente a un miembro (SCRUM-71), la única acción de
+    moderación que no termina la membresía.
 
     Del CP2 cubre también Organización de canales: Organizar canales en
     categorías (SCRUM-39) —crear, renombrar, eliminar y reordenar categorías,
@@ -761,6 +763,151 @@ paths:
             alguien sin `BAN_MEMBERS` recibe `403` tanto si el usuario está
             baneado como si no: el código de respuesta no sirve para enumerar
             baneados.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Servidor inexistente.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /servers/{serverId}/mutes/{userId}:
+    put:
+      summary: Silenciar temporalmente a un miembro del servidor
+      description: >
+        SCRUM-71. Le saca al miembro, por un tiempo, la capacidad de enviar
+        mensajes y de hablar por voz, sin sacarlo del servidor: sigue viendo
+        los canales, leyendo y escuchando. Al cumplirse la duración la recupera
+        solo, sin que nadie haga nada. Es la única acción de moderación que no
+        termina la membresía.
+
+        El cliente manda una **duración** y no una fecha: el instante en que
+        vence lo calcula el servidor con su reloj (`muted_until`), así el reloj
+        del cliente no decide nada. La respuesta trae ese instante para que el
+        moderador vea la hora exacta sin volver a pedir la lista.
+
+        `PUT` porque afirma un estado, como banear: es idempotente. Silenciar a
+        alguien ya silenciado **reemplaza** la duración (también cuando la
+        nueva es más corta) y publica otro `community.member.muted`. Por eso tampoco se reintenta solo en el
+        gateway (ADR-0009): que sea idempotente lo hace seguro de reintentar,
+        pero la decisión sigue siendo del cliente.
+
+        Pide `MODERATE_MEMBERS` (ADR-0011) y respeta la jerarquía de la regla 4
+        de ese ADR: hay que estar **estrictamente** por encima del miembro,
+        empatar no alcanza, el owner no es blanco válido para nadie —ni para un
+        `ADMINISTRATOR`— y tampoco se puede silenciar a uno mismo. El bit
+        `MODERATE_MEMBERS` lo define el contrato de SCRUM-178; acá solo se lo
+        nombra.
+
+        El permiso se chequea antes que la existencia del miembro: quien no lo
+        tiene recibe `403` tanto si el usuario es miembro como si no, así que el
+        código de respuesta no sirve para enumerar miembros.
+
+        Publica `community.member.muted` después del commit. **El vencimiento
+        no publica nada**: al vencer no pasa nada que haya que avisar, porque
+        `chat` guarda `mutedUntil` y compara contra su reloj en cada pedido. El
+        silencio **sobrevive a irse y volver**: no depende de la membresía, así
+        que expulsar a alguien silenciado y que vuelva con una invitación no lo
+        levanta.
+
+        La auditoría del silencio no es de este endpoint: la escribe SCRUM-72.
+        Los silenciados se ven en `GET /servers/{serverId}/members/`
+        (`muted_until`) y el silenciado se entera de que lo está con
+        `my_muted_until` de `GET /servers/{serverId}`. Un silencio se levanta
+        antes de tiempo con `DELETE` en este mismo path.
+      operationId: muteMember
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MuteMemberRequest'
+      responses:
+        '200':
+          description: >
+            El miembro quedó silenciado hasta `muted_until`. Lo mismo si ya lo
+            estaba: la duración nueva reemplaza a la anterior.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ServerMute'
+        '403':
+          description: >
+            Quien silencia no tiene `MODERATE_MEMBERS`, o el blanco tiene una
+            jerarquía igual o superior a la suya, o es el owner, o es el mismo
+            que silencia. El permiso se chequea antes de buscar al miembro.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: >
+            Servidor inexistente, o el usuario no es miembro de ese servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: >
+            `duration_seconds` ausente, menor a 60 o mayor a 2419200 (28
+            días).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Levantar el silencio de un miembro
+      description: >
+        SCRUM-71. Borra el silencio y el miembro recupera de inmediato la
+        capacidad de enviar mensajes y de hablar por voz (lo que tarda el
+        evento en llegar a `chat`).
+
+        Es el par del `PUT` sobre el mismo recurso y, como él, idempotente:
+        afirma que el usuario no está silenciado. Levantar un silencio que no
+        hay —porque otro moderador lo levantó antes, porque nunca lo hubo o
+        porque ya **venció**— responde `204` igual y **no publica nada**.
+
+        Un silencio vencido cuenta como "no había silencio": `community` no
+        limpia las filas vencidas, así que si la fila sigue ahí el `DELETE` la
+        borra igual, pero no hay nada que avisar (`chat` ya dejó de aplicarlo
+        al vencer) y por eso no publica.
+
+        Pide `MODERATE_MEMBERS` y respeta la misma jerarquía que silenciar:
+        estrictamente por encima, el owner no es blanco válido y tampoco uno
+        mismo. A diferencia del `PUT`, **no pide que el usuario siga siendo
+        miembro**: el silencio sobrevive a que se vaya, y el moderador tiene que
+        poder levantarlo igual. Por eso el `404` es solo para el servidor.
+
+        Publica `community.member.unmuted` después del commit, **solo si la
+        fila borrada seguía vigente** (`muted_until` en el futuro). Si no había
+        fila, o estaba vencida, no publica.
+      operationId: unmuteMember
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: >
+            El usuario ya no está silenciado en el servidor. Lo mismo si no lo
+            estaba.
+        '403':
+          description: >
+            Quien levanta no tiene `MODERATE_MEMBERS`, o el blanco tiene una
+            jerarquía igual o superior a la suya, o es el owner, o es el mismo
+            que levanta. El permiso se chequea antes que lo demás.
           content:
             application/problem+json:
               schema:
@@ -1955,7 +2102,8 @@ components:
       type: object
       required:
         [id, name, description, owner_id, avatar_url, banner_url, created_at,
-         channels, categories, my_permissions, my_permission_names]
+         channels, categories, my_permissions, my_permission_names,
+         my_muted_until]
       properties:
         id:
           type: string
@@ -2017,6 +2165,23 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Permission'
+        my_muted_until:
+          description: >
+            Hasta cuándo está silenciado quien pidió el servidor (SCRUM-71), en
+            UTC con `Z`. `null` si no está silenciado o si el silencio ya
+            venció: una fecha pasada nunca sale.
+
+            Es el mismo criterio que `my_permissions`: el cliente decide "qué
+            puedo hacer yo acá" con lo que dice el servidor, sin cargar la lista
+            de miembros para buscarse a sí mismo. Se vuelve a pedir cuando llega
+            el aviso `permissions` (ADR-0017).
+
+            **Solo lo completa `GET /servers/{serverId}`**: en
+            `GET /servers/` va siempre `null`, porque calcularlo ahí sería una
+            consulta por servidor.
+          type: string
+          format: date-time
+          nullable: true
 
     UpdateServerRequest:
       type: object
@@ -2375,7 +2540,7 @@ components:
         Un miembro del servidor. Sin nombre ni avatar, que son de `identity`,
         y sin el id de la fila de membresía, que no le sirve a ningún cliente.
       type: object
-      required: [user_id, joined_at, roles]
+      required: [user_id, joined_at, roles, muted_until]
       properties:
         user_id:
           type: string
@@ -2390,6 +2555,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Role'
+        muted_until:
+          description: >
+            Hasta cuándo está silenciado el miembro (SCRUM-71), en UTC con
+            `Z`. `null` si no está silenciado o si el silencio ya venció: una
+            fecha pasada nunca sale. Es lo que le permite a un moderador ver
+            quién está silenciado y hasta cuándo, y levantarlo.
+          type: string
+          format: date-time
+          nullable: true
+
+    MuteMemberRequest:
+      type: object
+      required: [duration_seconds]
+      properties:
+        duration_seconds:
+          description: >
+            Cuánto dura el silencio, contado desde que el servidor recibe el
+            pedido. Entre 1 minuto y 28 días. Se manda una duración y no una
+            fecha para que el reloj del cliente no decida nada.
+          type: integer
+          minimum: 60
+          maximum: 2419200
+
+    ServerMute:
+      description: >
+        El silencio de un miembro (SCRUM-71). Sin el id de la fila, porque los
+        endpoints se dirigen por `user_id`.
+      type: object
+      required: [user_id, muted_until, muted_by]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        muted_until:
+          description: >
+            El instante en que vence, calculado por el servidor y truncado al
+            segundo. En UTC y con `Z`, a diferencia de las demás fechas de
+            `community` (ver `ServerBan.created_at`): se compara contra el
+            reloj de tres lados (`community`, `chat` y el cliente), y sin zona
+            el navegador la leería como hora local.
+          type: string
+          format: date-time
+        muted_by:
+          description: El moderador que silenció, o que volvió a silenciar.
+          type: string
+          format: uuid
 
     ServerBan:
       description: >
