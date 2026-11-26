@@ -1876,6 +1876,55 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /files/upload:
+    post:
+      summary: Subir un archivo adjunto (SCRUM-48)
+      description: >
+        Sube un archivo a Cloudinary y devuelve la URL pública junto con el
+        nombre y el tipo. El cliente incluye esta URL en el `MessageSendFrame`
+        para adjuntar el archivo al mensaje.
+
+        Formatos aceptados: `image/jpeg`, `image/png`, `image/gif`,
+        `image/webp`, `application/pdf`, `text/plain`. Tamaño máximo: 25 MB.
+        Cualquier otro formato o un archivo más grande devuelve 422.
+      operationId: uploadAttachment
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Archivo subido correctamente.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Attachment'
+        '422':
+          description: Formato no soportado o archivo demasiado grande.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Error al subir el archivo a Cloudinary.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   parameters:
     XUserId:
@@ -1945,6 +1994,26 @@ components:
       description: Código corto de la invitación (no es el UUID interno del recurso).
 
   schemas:
+    Attachment:
+      description: >
+        Archivo adjunto subido a Cloudinary. Lo devuelve `POST /files/upload`
+        y el cliente lo incluye en el `MessageSendFrame` (SCRUM-48).
+      type: object
+      required: [url, filename, contentType]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: URL pública de Cloudinary donde está almacenado el archivo.
+        filename:
+          type: string
+          description: Nombre original del archivo.
+        contentType:
+          type: string
+          description: >
+            MIME type del archivo. Valores posibles: `image/jpeg`, `image/png`,
+            `image/gif`, `image/webp`, `application/pdf`, `text/plain`.
+
     Server:
       description: >
         Los nombres de los campos son los que el servicio devuelve hoy
