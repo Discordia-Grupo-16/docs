@@ -161,6 +161,14 @@ resource "aws_ecs_task_definition" "community" {
       { name = "RABBITMQ_URL", valueFrom = aws_ssm_parameter.rabbitmq_url.arn }
     ]
 
+    healthCheck = {
+      command     = ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/livez')"]
+      interval    = 30
+      timeout     = 5
+      retries     = 3
+      startPeriod = 60
+    }
+
     logConfiguration = {
       logDriver = "awslogs"
       options = {
