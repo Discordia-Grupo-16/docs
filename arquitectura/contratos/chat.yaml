@@ -339,8 +339,8 @@ paths:
         el usuario sea miembro activo del servidor con `VIEW_CHANNEL` y
         `CONNECT` en el servidor, y que el canal sea de voz, en ese orden
         (404, 403, 422). Si pasa, firma un token de LiveKit de
-        vida corta que solo permite publicar el micrófono en la sala del
-        canal (ADR-0005). Sin body. Si el usuario tenía otra sala firmada,
+        vida corta que permite publicar el micrófono y la cámara (SCRUM-59) en
+        la sala del canal (ADR-0005). Sin body. Si el usuario tenía otra sala firmada,
         `chat` lo saca de ella con el motivo `other_device`
         (ver VoiceDisconnectReason).
 
@@ -925,9 +925,10 @@ components:
         token:
           type: string
           description: >
-            JWT de acceso firmado para LiveKit. Solo permite publicar el
-            micrófono, o nada si el miembro está silenciado por un moderador
-            (SCRUM-71): en ese caso entra y escucha, pero no puede publicar.
+            JWT de acceso firmado para LiveKit. Permite publicar el
+            micrófono y la cámara (SCRUM-59), o nada si el miembro está
+            silenciado por un moderador (SCRUM-71): en ese caso entra y
+            escucha, pero no puede publicar ni el micrófono ni la cámara.
         url:
           type: string
           description: URL `wss://` de LiveKit a la que se conecta el cliente.
