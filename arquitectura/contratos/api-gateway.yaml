@@ -19,7 +19,7 @@ info:
       /api/v1/channels/{channelId}/ws,
       /api/v1/channels/{channelId}/voice-tokens,
       /api/v1/channels/{channelId}/read, /api/v1/users/me/unread,
-      /api/v1/users/me/read-all,
+      /api/v1/users/me/read-all, /api/v1/users/me/notification-settings*,
       /api/v1/servers/{serverId}/voice-participants,
       /api/v1/webhooks/livekit → chat-y-real-time
     - /api/v1/admin/users* → identity (backoffice, solo staff)
@@ -1650,6 +1650,153 @@ paths:
                     type: array
                     items:
                       $ref: 'chat.yaml#/components/schemas/ReadState'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/users/me/notification-settings:
+    get:
+      summary: '[proxy → chat-y-real-time] Preferencias de notificación del usuario'
+      description: >
+        SCRUM-77 y SCRUM-78. Igual que `/users/me/unread`, va a `chat` y no a
+        `identity`: es un literal más largo que `/api/v1/users/me`.
+      operationId: gatewayListNotificationSettings
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ver chat.yaml → GET /users/me/notification-settings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: 'chat.yaml#/components/schemas/NotificationSetting'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/users/me/notification-settings/servers/{serverId}:
+    put:
+      summary: '[proxy → chat-y-real-time] Guardar la preferencia de un servidor'
+      operationId: gatewayPutServerNotificationSetting
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'chat.yaml#/components/schemas/NotificationSettingRequest'
+      responses:
+        '200':
+          description: Ver chat.yaml → PUT /users/me/notification-settings/servers/{serverId}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'chat.yaml#/components/schemas/NotificationSetting'
+        '400':
+          description: UUID malformado o body inválido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      summary: '[proxy → chat-y-real-time] Volver al valor por defecto en un servidor'
+      operationId: gatewayDeleteServerNotificationSetting
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '204':
+          description: Ver chat.yaml → DELETE /users/me/notification-settings/servers/{serverId}
+        '400':
+          description: UUID malformado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/users/me/notification-settings/channels/{channelId}:
+    put:
+      summary: '[proxy → chat-y-real-time] Guardar la preferencia de un canal'
+      operationId: gatewayPutChannelNotificationSetting
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: 'chat.yaml#/components/schemas/NotificationSettingRequest'
+      responses:
+        '200':
+          description: Ver chat.yaml → PUT /users/me/notification-settings/channels/{channelId}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: 'chat.yaml#/components/schemas/NotificationSetting'
+        '400':
+          description: UUID malformado o body inválido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      summary: '[proxy → chat-y-real-time] Volver al valor por defecto en un canal'
+      operationId: gatewayDeleteChannelNotificationSetting
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ChannelId'
+      responses:
+        '204':
+          description: Ver chat.yaml → DELETE /users/me/notification-settings/channels/{channelId}
+        '400':
+          description: UUID malformado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '429':

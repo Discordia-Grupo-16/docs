@@ -12,6 +12,9 @@ info:
     channelId/authorId ahora referencian directamente los recursos de esos
     servicios (Channel.id de `community`, User.id de `identity`).
 
+    Del Sprint 4: menciones (SCRUM-47) y preferencias de notificación por
+    canal y por servidor, con el atajo de silenciar (SCRUM-78 y SCRUM-77).
+
 servers:
   - url: http://localhost:8003
     description: Entorno local (detrás del API Gateway en producción)
@@ -134,6 +137,14 @@ paths:
         vigente, **sin** tocar `editedAt` y **sin** publicar nada. Si cambió,
         `chat` publica `chat.message.updated` para que las otras instancias
         avisen a sus clientes (frame `message.updated`).
+
+        Menciones (SCRUM-47): al editar, `chat` vuelve a calcular `mentions`
+        desde el `content` nuevo, con los permisos que el autor tiene en ese
+        momento y las mismas reglas que al enviar (ver `Mentions`). Una
+        mención agregada al editar **no avisa**: no genera frame `mention`.
+        Sí cuenta en el `mentionCount` del `GET /users/me/unread`, que se
+        calcula sobre `mentions` al leer, igual que una mención que se quita
+        deja de contar.
       operationId: editMessage
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -163,7 +174,12 @@ paths:
                   data:
                     $ref: '#/components/schemas/Message'
         '400':
-          description: UUID malformado, el body no es JSON, o `content` vacío o de más de 2000 caracteres.
+          description: >
+            UUID malformado, el body no es JSON, o `content` vacío o de más
+            de 2000 caracteres. También si el `content` nuevo menciona a más
+            de 20 usuarios o 5 roles distintos (SCRUM-47): es la misma regla
+            que el `TOO_MANY_MENTIONS` del envío por el WebSocket, y no se
+            guarda nada.
           content:
             application/problem+json:
               schema:
@@ -433,7 +449,21 @@ paths:
         SCRUM-54), cuando cambia quién está conectado a un canal de voz;
         `MessageUpdatedFrame` (`message.updated`, SCRUM-44), cuando se edita
         un mensaje; y `MessageDeletedFrame` (`message.deleted`, SCRUM-45),
-        cuando se borra uno.
+        cuando se borra uno; `MentionFrame` (`mention`, SCRUM-47), a cada
+        usuario mencionado en un mensaje nuevo; y
+        `NotificationSettingsUpdatedFrame` (`notification-settings.updated`,
+        SCRUM-78), a las sesiones del propio usuario cuando cambia una de sus
+        preferencias de notificación.
+
+
+        Menciones al enviar (SCRUM-47): el cliente escribe las marcas dentro
+        del `content` (`<@userId>`, `<@&roleId>` y `@everyone`, ver
+        `Mentions`) y `chat` las resuelve al guardar el mensaje. El
+        `message.created` y el ack de `message.send` traen el `mentions` ya
+        resuelto. Una marca que no se resuelve no es un error: queda como
+        texto. Más de 20 usuarios o más de 5 roles distintos en un mismo
+        mensaje rechazan el envío con el código de error
+        `TOO_MANY_MENTIONS`.
       operationId: channelWebSocket
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -536,8 +566,16 @@ paths:
         cliente: un servidor es no leído si alguno de sus canales lo es.
         Un canal sin estado de lectura cuenta como no leído si su último
         mensaje es de otro usuario. Un canal donde el último mensaje es del
-        propio usuario nunca es no leído. `mentionCount` vale siempre `0` hasta
-        que exista la optativa "Menciones" (CA3).
+        propio usuario nunca es no leído.
+
+        Menciones y preferencias (SCRUM-47, 77 y 78): cada canal trae
+        `mentionCount`, cuántos mensajes sin leer mencionan al usuario, y
+        `notificationLevel`, el nivel de aviso que rige en ese canal ya
+        resuelto entre el canal, el servidor y el silencio (ver
+        `NotificationSetting`). Lo que se destaca lo decide el cliente con
+        esos dos campos y `unread` (ver `NotificationLevel`). Un canal
+        silenciado sigue trayendo `unread` y `mentionCount` reales: silenciar
+        no marca nada como leído (CA1 de SCRUM-77).
       operationId: getUnread
       parameters:
         - $ref: '#/components/parameters/XUserId'
@@ -662,6 +700,237 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/ReadState'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/notification-settings:
+    get:
+      summary: Preferencias de notificación del usuario
+      description: >
+        SCRUM-78 y SCRUM-77. Devuelve solo los ajustes que el usuario guardó,
+        de servidores donde sigue siendo miembro activo. Un canal o un
+        servidor que no aparece usa el valor por defecto: nivel heredado y
+        sin silenciar.
+      operationId: listNotificationSettings
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+      responses:
+        '200':
+          description: Los ajustes guardados, en cualquier orden.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NotificationSetting'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/notification-settings/servers/{serverId}:
+    put:
+      summary: Guardar la preferencia de un servidor
+      description: >
+        SCRUM-78 (CA1) y SCRUM-77 (CA2 y CA3). Reemplaza el ajuste del
+        usuario para el servidor: el body lleva los dos campos siempre.
+        Silenciar es `muted: true` y reactivar es `muted: false`, sin tocar
+        `level`. Es idempotente: guardar lo mismo responde `200` y no
+        publica nada. Si cambió, `chat` publica
+        `chat.notification-settings.updated` para las otras sesiones del
+        usuario.
+      operationId: putServerNotificationSetting
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationSettingRequest'
+      responses:
+        '200':
+          description: El ajuste guardado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/NotificationSetting'
+        '400':
+          description: >
+            `serverId` no es un UUID, el body no es JSON, falta un campo o
+            `level` no es uno de los valores permitidos.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: El usuario no es miembro activo del servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Volver al valor por defecto en un servidor
+      description: >
+        Borra el ajuste del servidor: vuelve al nivel por defecto y sin
+        silenciar. No toca los ajustes de los canales del servidor. Es
+        idempotente: si no había ajuste, responde `204` y no publica nada.
+      operationId: deleteServerNotificationSetting
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '204':
+          description: El servidor usa el valor por defecto.
+        '400':
+          description: '`serverId` no es un UUID.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: El usuario no es miembro activo del servidor.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/me/notification-settings/channels/{channelId}:
+    put:
+      summary: Guardar la preferencia de un canal
+      description: >
+        SCRUM-78 (CA1 y CA2) y SCRUM-77 (CA1 y CA3). Igual que el del
+        servidor, para un canal de texto donde el usuario tiene
+        `VIEW_CHANNEL`. El ajuste del canal gana sobre el del servidor,
+        salvo el silencio del servidor, que apaga todos sus canales (ver
+        `NotificationSetting`).
+      operationId: putChannelNotificationSetting
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ChannelId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationSettingRequest'
+      responses:
+        '200':
+          description: El ajuste guardado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/NotificationSetting'
+        '400':
+          description: >
+            `channelId` no es un UUID, el canal no es de texto, el body no es
+            JSON, falta un campo o `level` no es uno de los valores
+            permitidos.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Falta el header `X-User-Id` o no es un UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: >
+            El usuario no es miembro activo del servidor del canal, o le falta
+            `VIEW_CHANNEL`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: El canal no existe o fue borrado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Volver a heredar del servidor en un canal
+      description: >
+        Borra el ajuste del canal: vuelve a regir el del servidor. Es
+        idempotente: si no había ajuste, responde `204` y no publica nada.
+        No pide `VIEW_CHANNEL`, para que quien perdió el acceso pueda limpiar
+        lo que guardó.
+      operationId: deleteChannelNotificationSetting
+      parameters:
+        - $ref: '#/components/parameters/XUserId'
+        - $ref: '#/components/parameters/ChannelId'
+      responses:
+        '204':
+          description: El canal hereda la preferencia del servidor.
+        '400':
+          description: '`channelId` no es un UUID.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Falta el header `X-User-Id` o no es un UUID.
           content:
@@ -851,7 +1120,7 @@ components:
   schemas:
     Message:
       type: object
-      required: [messageId, channelId, serverId, authorId, content, createdAt, editedAt, clientMessageId, reactions, reactionsVersion]
+      required: [messageId, channelId, serverId, authorId, content, createdAt, editedAt, clientMessageId, reactions, reactionsVersion, mentions]
       properties:
         messageId:
           type: string
@@ -909,6 +1178,84 @@ components:
             solo si su `reactionsVersion` es mayor que el que ya tiene para
             ese mensaje: así un frame repetido o que llega fuera de orden no
             retrocede las reacciones.
+        mentions:
+          $ref: '#/components/schemas/Mentions'
+
+    Mentions:
+      type: object
+      description: |
+        Menciones del mensaje (SCRUM-47), resueltas por `chat` al enviar o al
+        editar. El cliente escribe las marcas dentro del `content`, que se
+        guarda tal cual:
+
+        - `<@userId>`: un usuario. Entra en `userIds` si es miembro activo
+          del servidor con `VIEW_CHANNEL`.
+        - `<@&roleId>`: un rol. Entra en `roleIds` solo si el autor tiene
+          `MENTION_EVERYONE` (`1 << 12`). Avisa a los miembros que tienen ese
+          rol y `VIEW_CHANNEL` (CA2).
+        - `@everyone`: todo el canal. Pone `everyone` en `true` solo si el
+          autor tiene `MENTION_EVERYONE` (CA3). Avisa a los miembros con
+          `VIEW_CHANNEL`.
+
+        Una marca que no cumple su regla queda como texto en el `content` y
+        no aparece acá: así se resuelve el CA4. El autor nunca se avisa a sí
+        mismo, aunque se mencione o tenga el rol mencionado. Un mensaje
+        anterior a SCRUM-47 trae las dos listas vacías y `everyone` en
+        `false`.
+      required: [userIds, roleIds, everyone]
+      properties:
+        userIds:
+          type: array
+          maxItems: 20
+          description: Usuarios mencionados, sin repetidos, en el orden en que aparecen.
+          items:
+            type: string
+            format: uuid
+        roleIds:
+          type: array
+          maxItems: 5
+          description: Roles mencionados, sin repetidos, en el orden en que aparecen.
+          items:
+            type: string
+            format: uuid
+        everyone:
+          type: boolean
+
+    MentionFrame:
+      type: object
+      description: >
+        Frame (SCRUM-47) que `chat` envía por el WebSocket de chat al usuario
+        mencionado en un mensaje nuevo: es la "notificación destacada" en
+        vivo. Nace del evento `chat.message.sent`. Si la mención es directa
+        o por un rol, va solo a esos usuarios (`SendToUser`). Si es
+        `@everyone`, va a los miembros con `VIEW_CHANNEL`
+        (`Broadcast(serverId)`). Nunca se manda por una edición.
+
+        El cliente lo ignora si `authorId` es el propio usuario, y cuenta
+        `messageId` distintos, así que un frame repetido no suma dos veces.
+        Si el canal está abierto en pantalla, lo marca leído como cualquier
+        mensaje. Si no, suma uno al `mentionCount` local del canal, y si el
+        `notificationLevel` del canal no es `none`, avisa en la app.
+      required: [type, messageId, channelId, serverId, authorId, createdAt]
+      properties:
+        type:
+          type: string
+          enum: [mention]
+        messageId:
+          type: string
+          format: uuid
+        channelId:
+          type: string
+          format: uuid
+        serverId:
+          type: string
+          format: uuid
+        authorId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
 
     Reaction:
       type: object
@@ -1014,7 +1361,7 @@ components:
         miembros con `VIEW_CHANNEL`. Lleva los datos y no es un `invalidate`,
         porque el mensaje es de `chat` (ADR-0017). Nace del evento
         `chat.message.updated`.
-      required: [type, messageId, channelId, serverId, authorId, content, editedAt]
+      required: [type, messageId, channelId, serverId, authorId, content, editedAt, mentions]
       properties:
         type:
           type: string
@@ -1039,6 +1386,8 @@ components:
           type: string
           format: date-time
           description: Misma regla que en `Message.editedAt`.
+        mentions:
+          $ref: '#/components/schemas/Mentions'
 
     MessageDeletedFrame:
       type: object
@@ -1131,7 +1480,7 @@ components:
 
     ChannelUnread:
       type: object
-      required: [channelId, serverId, lastMessageId, lastMessageAt, lastReadMessageId, lastReadAt, unread, mentionCount]
+      required: [channelId, serverId, lastMessageId, lastMessageAt, lastReadMessageId, lastReadAt, unread, mentionCount, notificationLevel]
       properties:
         channelId:
           type: string
@@ -1171,7 +1520,118 @@ components:
         mentionCount:
           type: integer
           minimum: 0
-          description: Siempre `0` hasta que exista la optativa "Menciones" (CA3 de SCRUM-75).
+          maximum: 100
+          description: >
+            Cuántos mensajes posteriores al último leído mencionan al usuario
+            (SCRUM-47, y CA3 de SCRUM-75): directamente, por un rol que tiene
+            hoy o con `@everyone`. Cuenta mensajes y no marcas: uno que
+            menciona al usuario dos veces suma uno. No cuenta los propios ni
+            los borrados. Cuenta desde lo último que leyó y, además, desde
+            que entró al servidor: así un `@everyone` viejo no le llega al
+            que acaba de entrar, ni al que salió y volvió a entrar conservando
+            su estado de lectura. Se cuenta hasta 100, y el cliente muestra
+            "99+".
+        notificationLevel:
+          allOf:
+            - $ref: '#/components/schemas/NotificationLevel'
+          description: >
+            El nivel que rige en el canal, ya resuelto entre el canal, el
+            servidor y el silencio (ver `NotificationSetting`). Si el usuario
+            no guardó ningún ajuste vale `mentions`, el valor por defecto. El
+            campo está desde SCRUM-47 para que el cliente no cambie cuando
+            llegaron las preferencias (SCRUM-78), igual que `mentionCount`
+            desde SCRUM-75.
+
+    NotificationLevel:
+      type: string
+      enum: [all, mentions, none]
+      description: |
+        Qué genera una notificación destacada en un canal (SCRUM-78):
+        `all`, cualquier mensaje nuevo de otro usuario; `mentions`, solo las
+        menciones al usuario; `none`, nada. El valor por defecto es
+        `mentions`. Con ningún nivel un mensaje deja de contar como no leído.
+
+        La regla de qué se destaca vive en una sola función de
+        `@discordia/core`, que usan web y mobile:
+
+        - `none`: nada se destaca y no hay aviso en la app.
+        - `mentions`: se destaca si `mentionCount > 0`, y avisa con cada
+          frame `mention`.
+        - `all`: se destaca si `unread` o `mentionCount > 0`, y avisa con
+          cada `message.created` de otro usuario y con cada `mention`.
+
+    NotificationSetting:
+      type: object
+      description: |
+        Ajuste de notificación del usuario para un servidor o un canal
+        (SCRUM-77 y SCRUM-78). `chat` resuelve el nivel de un canal así, y lo
+        devuelve ya resuelto en `ChannelUnread.notificationLevel`:
+
+        1. Si el servidor o el canal están silenciados (`muted`), `none`.
+        2. Si no, el `level` del canal; si es `null`, el del servidor; si
+           también es `null`, `mentions`.
+
+        El silencio va aparte del nivel porque los dos CA lo piden: silenciar
+        el servidor apaga **todos** sus canales, aunque alguno tenga un nivel
+        propio (CA2 de SCRUM-77), mientras que entre niveles gana el del
+        canal (CA2 de SCRUM-78). Y reactivar devuelve el nivel que el usuario
+        había elegido, en vez de borrarlo (CA3 de SCRUM-77).
+      required: [scopeType, scopeId, serverId, level, muted, updatedAt]
+      properties:
+        scopeType:
+          type: string
+          enum: [server, channel]
+        scopeId:
+          type: string
+          format: uuid
+          description: El `serverId` o el `channelId`, según `scopeType`.
+        serverId:
+          type: string
+          format: uuid
+          description: El servidor del ajuste. Si `scopeType` es `server`, es igual a `scopeId`.
+        level:
+          allOf:
+            - $ref: '#/components/schemas/NotificationLevel'
+          nullable: true
+          description: '`null` hereda: el canal, del servidor; el servidor, el valor por defecto.'
+        muted:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+          description: >
+            Cuándo se guardó. Ordena los cambios: el cliente aplica un
+            `notification-settings.updated` solo si su `updatedAt` es más
+            nuevo que el que ya tiene para ese alcance.
+
+    NotificationSettingRequest:
+      type: object
+      description: Body del `PUT` de un ajuste. Lleva los dos campos siempre.
+      required: [level, muted]
+      properties:
+        level:
+          allOf:
+            - $ref: '#/components/schemas/NotificationLevel'
+          nullable: true
+        muted:
+          type: boolean
+
+    NotificationSettingsUpdatedFrame:
+      type: object
+      description: >
+        Frame (SCRUM-78) que `chat` envía a todas las sesiones del usuario
+        cuando cambia uno de sus ajustes, como `read-state.updated`. Nace de
+        `chat.notification-settings.updated`. Un `DELETE` llega como un
+        ajuste con `level: null` y `muted: false`, que equivale al valor por
+        defecto. El cliente actualiza su lista de ajustes y vuelve a pedir
+        `GET /users/me/unread`, que trae el `notificationLevel` resuelto.
+      required: [type, setting]
+      properties:
+        type:
+          type: string
+          enum: [notification-settings.updated]
+        setting:
+          $ref: '#/components/schemas/NotificationSetting'
 
     VoiceParticipant:
       type: object
